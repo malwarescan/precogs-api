@@ -1,6 +1,17 @@
 <!doctype html><meta charset="utf-8"><title>Precogs Runtime</title>
 <body style="font:14px ui-monospace;background:#0b0d12;color:#e6e9ef">
-  <h3>Precogs Runtime</h3>
-  <p>Service is up. API base: same origin.</p>
+<h3>Precogs Runtime</h3><p>Service is up. Test endpoints:</p>
+<ul>
+<li><a href="/health">/health</a></li>
+<li><a href="/v1/invoke" onclick="event.preventDefault(); test();">Invoke stub</a></li>
+</ul>
+<pre id="out"></pre>
+<script>
+async function test(){
+  const r = await fetch('/v1/invoke',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({precog:'schema',prompt:'demo',stream:true})}).then(r=>r.json());
+  const es = new EventSource(`/v1/jobs/${r.job_id}/events`);
+  es.addEventListener('answer.delta', e=>document.getElementById('out').textContent += JSON.parse(e.data).text);
+  es.addEventListener('answer.complete', e=>document.getElementById('out').textContent += "\n[complete]");
+}
+</script>
 </body>
-
