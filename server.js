@@ -132,6 +132,17 @@ app.post("/v1/invoke", requireAuth, rateLimit, async (req, res) => {
 // GET /v1/jobs/:id/events - Stream events as SSE
 app.get("/v1/jobs/:id/events", async (req, res) => {
   try {
+    // If auth is required, allow token in query param for EventSource (can't set headers)
+    if (process.env.API_KEY) {
+      const hdr = req.headers.authorization || "";
+      const qtk = req.query.token ? `Bearer ${req.query.token}` : "";
+      const expected = `Bearer ${process.env.API_KEY}`;
+      
+      if (hdr !== expected && qtk !== expected) {
+        return res.status(401).json({ ok: false, error: "Authorization required" });
+      }
+    }
+
     const jobId = req.params.id;
     const job = await getJob(jobId);
 

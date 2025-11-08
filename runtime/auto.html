@@ -1,0 +1,73 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Precogs • Auto</title>
+<style>
+  body{margin:0;background:#0b0d12;color:#e6e9ef;font:14px ui-monospace}
+  .wrap{padding:16px;max-width:900px;margin:auto}
+  .chip{display:inline-block;padding:2px 8px;border:1px solid #2a2f3a;border-radius:999px;margin:2px}
+  #out{white-space:pre-wrap;line-height:1.45;border:1px solid #1c212b;border-radius:12px;padding:12px;margin-top:12px;min-height:140px}
+  a{color:#8ab4f8}
+</style>
+<div class="wrap">
+  <h3>Precogs • Auto</h3>
+  <div id="meta"></div>
+  <div id="out"></div>
+</div>
+<script>
+(async function(){
+  // Parse URL params OR a full directive in the hash
+  const p = new URLSearchParams(location.search);
+  const hash = decodeURIComponent(location.hash?.slice(1) || "");
+  const token = p.get('token') || "";          // optional
+  let precog = p.get('precog');                // e.g. schema
+  let task   = p.get('task');                  // free text
+  let url    = p.get('url');
+  let type   = p.get('type');
+
+  // Support a directive in the hash like: /crtns:precog:@schema: --url ... --type ... --task "..."
+  if (!precog && hash.startsWith('/crtns:precog:')) {
+    const m = hash.match(/^\/crtns:precog:@([^:]+):(?:\s+--url\s+(\S+))?(?:\s+--type\s+(\S+))?(?:\s+--task\s+(.+))?/i);
+    if (m) {
+      precog = m[1]; url = url || m[2]; type = type || m[3]; task = task || (m[4]?.trim() ?? "");
+    }
+  }
+
+  const meta = document.getElementById('meta');
+  const out  = document.getElementById('out');
+  function chip(k,v){ return `<span class="chip">${k}: <b>${(v??'').toString().slice(0,200)}</b></span>`; }
+
+  if (!precog) { out.textContent = 'Missing ?precog= or #/crtns:precog:…'; return; }
+  meta.innerHTML = [chip('precog',precog), chip('url',url||''), chip('type',type||''), chip('task',task||'')].join(' ');
+
+  // Build request
+  const body = {
+    precog,
+    prompt: task || `Run ${precog}`,
+    context: Object.fromEntries(Object.entries({ url, type }).filter(([,v])=>v)),
+    stream: true
+  };
+
+  try {
+    // POST /v1/invoke (can send Authorization header here)
+    const r = await fetch('/v1/invoke', {
+      method:'POST',
+      headers: Object.assign({'content-type':'application/json'}, token ? {'authorization':`Bearer ${token}`} : {}),
+      body: JSON.stringify(body)
+    });
+    const { ok, job_id, error } = await r.json();
+    if (!ok) throw new Error(error || 'invoke failed');
+
+    // OPEN SSE (EventSource cannot set headers → pass ?token= if API requires it)
+    const es = new EventSource(`/v1/jobs/${job_id}/events${token ? `?token=${encodeURIComponent(token)}`:''}`);
+    const append = t => { out.textContent += t; out.scrollTop = out.scrollHeight; };
+    es.addEventListener('grounding.chunk', e => append(`[grounding] ${e.data}\n`));
+    es.addEventListener('reasoning.delta', e => append(JSON.parse(e.data).text || ''));
+    es.addEventListener('answer.delta',    e => append(JSON.parse(e.data).text || ''));
+    es.addEventListener('answer.complete', e => { append('\n[complete]\n'); es.close(); });
+    es.addEventListener('error',           e => { append(`\n[error] ${e.data||''}\n`); });
+  } catch (e) {
+    out.textContent = `Error: ${e.message || e}`;
+  }
+})();
+</script>
+
