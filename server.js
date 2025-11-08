@@ -287,7 +287,11 @@ app.get("/metrics", async (_req, res) => {
     res.json(metrics);
   } catch (e) {
     console.error("[metrics] Error:", e);
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ 
+      ok: false, 
+      error: e.message || String(e),
+      details: process.env.DATABASE_URL ? "Database connection failed" : "DATABASE_URL not set"
+    });
   }
 });
 
