@@ -47,18 +47,22 @@ Reference materials and code samples for OpenAI function calling with streaming.
 
 ---
 
-## Code Samples (To Be Added)
+## Code Samples
 
 ### Node.js Examples
 
-**Status:** Pending - Will add 5 real-world examples
+**Status:** ✅ Added - See `CODE_SAMPLES.md` for full examples
 
-**Planned Topics:**
-1. Basic streaming + function calling
-2. Multi-function handling
-3. Error handling patterns
-4. Client-side consumption
-5. Production-ready implementation
+**Topics Covered:**
+1. ✅ Official OpenAI example - Basic streaming + function calling
+2. ✅ Community discussion - Chunk accumulation patterns
+3. ✅ SSE streaming pattern - Server-Sent Events
+4. ✅ Basic streaming mechanics - Simple streaming loop
+5. ✅ Non-streaming function calling - Fallback pattern
+
+**See Also:**
+- `CODE_SAMPLES.md` - Full code examples with comparisons
+- `ADAPTATION_GUIDE.md` - How we adapted examples to Precogs
 
 ### Python Examples
 
