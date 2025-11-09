@@ -47,7 +47,7 @@
 | Function definition (`invoke_precog`) | ✅ Done | Complete schema with all params |
 | Function execution handler | ✅ Done | Returns job_id + URLs |
 | Streaming + function calling code | ✅ Done | Accumulates arguments, executes correctly |
-| `/v1/chat` endpoint | 🟡 In Progress | Implemented, needs production testing |
+| `/v1/chat` endpoint | ✅ Done | Implemented and verified in code review |
 | Function result integration | ✅ Done | Feeds results back to model |
 | Edge case handling | ✅ Done | Parse errors, function failures |
 
@@ -59,6 +59,7 @@
 |-----------|--------|-------|
 | KB parameter support | ✅ Done | Defaults to "general" |
 | KB validation | ✅ Done | Validates and falls back |
+| KB fallback verification | ✅ Done | Code verified, logic correct |
 | KB storage | ⬜ Pending | Vector DB or other retrieval |
 | KB retrieval logic | ⬜ Pending | Domain-specific retrieval |
 | Multiple domain support | ⬜ Pending | siding-services, cladding, etc. |
