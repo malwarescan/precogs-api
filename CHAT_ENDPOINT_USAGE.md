@@ -65,21 +65,35 @@ curl -X POST https://precogs.croutons.ai/v1/chat \
 
 ## Response Format (SSE Stream)
 
-The endpoint streams Server-Sent Events (SSE) with JSON chunks:
+The endpoint streams Server-Sent Events (SSE) with JSON chunks. Each line is prefixed with `data: ` and followed by `\n\n`.
 
-### Content Chunk
+### Streaming Protocol
+
+**Important:** Function call arguments may arrive across multiple chunks. Clients must accumulate `delta.function_call.arguments` until `finish_reason: "function_call"` indicates completion.
+
+### Event Types
+
+#### Content Chunk
+
+Regular model text output:
 
 ```json
 {"type":"content","content":"I'll help you run a schema audit..."}
 ```
 
-### Function Call Start
+**Note:** Content may arrive in multiple chunks. Accumulate for full message.
+
+#### Function Call Start
+
+Indicates model wants to call a function:
 
 ```json
 {"type":"function_call_start","name":"invoke_precog"}
 ```
 
-### Function Call
+#### Function Call
+
+Complete function call with all arguments:
 
 ```json
 {
@@ -87,35 +101,69 @@ The endpoint streams Server-Sent Events (SSE) with JSON chunks:
   "name":"invoke_precog",
   "arguments":{
     "precog":"schema",
-    "url":"https://example.com/service"
+    "url":"https://example.com/service",
+    "kb":"general",
+    "type":"Service",
+    "task":"Generate JSON-LD"
   }
 }
 ```
 
-### Function Result
+**Important:** Arguments are accumulated across chunks. This event fires when `finish_reason: "function_call"` is received.
+
+#### Function Result
+
+Function execution result (standardized format):
 
 ```json
 {
   "type":"function_result",
   "result":{
-    "job_id":"uuid",
-    "stream_url":"https://precogs.croutons.ai/v1/jobs/uuid/events",
-    "cli_url":"https://precogs.croutons.ai/cli?precog=schema&url=...",
-    "message":"Precog job created. Job ID: uuid..."
+    "job_id":"550e8400-e29b-41d4-a716-446655440000",
+    "status":"pending",
+    "stream_url":"https://precogs.croutons.ai/v1/jobs/550e8400-e29b-41d4-a716-446655440000/events",
+    "ndjson_url":"https://precogs.croutons.ai/v1/run.ndjson?precog=schema&url=https%3A%2F%2Fexample.com%2Fservice",
+    "cli_url":"https://precogs.croutons.ai/cli?precog=schema&url=https%3A%2F%2Fexample.com%2Fservice&type=Service&task=Generate%20JSON-LD",
+    "message":"Precog job created. Job ID: 550e8400-e29b-41d4-a716-446655440000. Stream results at: https://precogs.croutons.ai/cli?..."
   }
 }
 ```
 
-### Complete
+**Standardized Fields:**
+- `job_id` (string, UUID) - Job identifier
+- `status` (string) - Job status ("pending", "running", "done", "error")
+- `stream_url` (string) - SSE stream endpoint
+- `ndjson_url` (string) - NDJSON stream endpoint
+- `cli_url` (string) - CLI viewer URL
+- `message` (string) - Human-readable message
+
+#### Complete
+
+Stream finished successfully:
 
 ```json
 {"type":"complete"}
 ```
 
-### Error
+#### Error
+
+Error occurred:
 
 ```json
 {"type":"error","error":"Error message here"}
+```
+
+### Example Complete Stream
+
+```
+data: {"type":"content","content":"I'll help you run a schema audit"}
+data: {"type":"content","content":" on that URL."}
+data: {"type":"function_call_start","name":"invoke_precog"}
+data: {"type":"function_call","name":"invoke_precog","arguments":{"precog":"schema","url":"https://example.com/service"}}
+data: {"type":"function_result","result":{"job_id":"uuid","cli_url":"..."}}
+data: {"type":"content","content":"Your job has been created. "}
+data: {"type":"content","content":"Click here to watch: [link]"}
+data: {"type":"complete"}
 ```
 
 ---

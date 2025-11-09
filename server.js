@@ -429,18 +429,14 @@ app.get("/cli", (req, res) => {
 });
 
 // POST /v1/chat - OpenAI function calling with streaming
-app.post("/v1/chat", async (req, res) => {
+app.post("/v1/chat", requireAuth, rateLimit, async (req, res) => {
   try {
-    // Optional auth check
-    if (process.env.API_KEY) {
-      const authHeader = req.get("Authorization");
-      const token = req.query.token;
-      const expected = `Bearer ${process.env.API_KEY}`;
-      
-      if (authHeader !== expected && token !== process.env.API_KEY) {
-        return res.status(401).json({ ok: false, error: "Authorization required" });
-      }
-    }
+    // Log request for monitoring
+    const startTime = Date.now();
+    console.log("[chat] Request received:", {
+      message: req.body.message?.substring(0, 100),
+      hasHistory: !!req.body.history?.length,
+    });
 
     const { message, history = [], model, temperature, max_tokens } = req.body;
 
@@ -467,21 +463,52 @@ app.post("/v1/chat", async (req, res) => {
     const { callWithFunctionCalling } = await import("./src/integrations/openai-chat.js");
 
     // Stream responses
+    let functionCalled = false;
+    let jobCreated = false;
+    let firstChunkTime = null;
+    
     try {
       for await (const chunk of callWithFunctionCalling(message, history, {
         model: model || "gpt-4",
         temperature: temperature || 0.7,
         maxTokens: max_tokens || 2000,
       })) {
+        // Track first chunk time for latency monitoring
+        if (!firstChunkTime) {
+          firstChunkTime = Date.now();
+          console.log("[chat] First chunk:", firstChunkTime - startTime, "ms");
+        }
+        
+        // Track function calls for monitoring
+        if (chunk.type === "function_call") {
+          functionCalled = true;
+          console.log("[chat] Function called:", chunk.name);
+        }
+        if (chunk.type === "function_result") {
+          jobCreated = true;
+          console.log("[chat] Job created:", chunk.result.job_id, "in", Date.now() - startTime, "ms");
+        }
+        
         // Send chunk as SSE
         res.write(`data: ${JSON.stringify(chunk)}\n\n`);
 
         // Handle client disconnect
         if (req.aborted) {
+          console.log("[chat] Client disconnected");
           break;
         }
       }
+      
+      // Log completion metrics
+      const totalTime = Date.now() - startTime;
+      console.log("[chat] Completed:", {
+        functionCalled,
+        jobCreated,
+        totalTime: totalTime + "ms",
+        firstChunkTime: firstChunkTime ? firstChunkTime - startTime + "ms" : "N/A",
+      });
     } catch (streamError) {
+      console.error("[chat] Stream error:", streamError);
       res.write(`data: ${JSON.stringify({ type: "error", error: streamError.message })}\n\n`);
     }
 

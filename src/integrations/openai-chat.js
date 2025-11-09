@@ -83,6 +83,8 @@ export async function* callWithFunctionCalling(userMessage, conversationHistory 
       const delta = choice.delta;
 
       // Handle function call chunks
+      // IMPORTANT: Arguments may arrive across multiple chunks
+      // We accumulate them until finish_reason indicates completion
       if (delta.function_call) {
         if (delta.function_call.name) {
           functionCallName = delta.function_call.name;
@@ -91,6 +93,7 @@ export async function* callWithFunctionCalling(userMessage, conversationHistory 
             name: functionCallName,
           };
         }
+        // Accumulate arguments across chunks (critical for multi-chunk arguments)
         if (delta.function_call.arguments) {
           functionCallArguments += delta.function_call.arguments;
         }

@@ -45,7 +45,12 @@ export async function executeInvokePrecog(args, baseUrl = "https://precogs.crout
   const { insertJob } = await import("../db.js");
   const { enqueueJob } = await import("../redis.js");
 
+  // Ensure kb defaults to "general" if not provided (supports Phase 1 before KB integration)
   const { kb = "general", precog, url, type, task } = args;
+  
+  // Validate kb is a known value (for future KB integration)
+  const validKBs = ["general", "siding-services", "cladding"];
+  const kbValue = validKBs.includes(kb) ? kb : "general";
 
   // Validate required parameters
   if (!precog || !url) {
@@ -54,14 +59,16 @@ export async function executeInvokePrecog(args, baseUrl = "https://precogs.crout
 
   const context = {};
   if (type) context.type = type;
+  // Store kb in context for worker to use (even if KB integration pending)
+  context.kb = kbValue;
 
   // Create job
-  const job = await insertJob(precog, task || `Run ${precog}`, { ...context, kb, url });
+  const job = await insertJob(precog, task || `Run ${precog}`, { ...context, url });
 
   // Enqueue job to Redis Stream
   if (process.env.REDIS_URL) {
     try {
-      await enqueueJob(job.id, precog, task || `Run ${precog}`, { ...context, kb, url });
+      await enqueueJob(job.id, precog, task || `Run ${precog}`, { ...context, url, kb: kbValue });
     } catch (redisErr) {
       console.error("[invoke_precog] Redis enqueue failed:", redisErr.message);
       // Continue anyway - job is in DB
