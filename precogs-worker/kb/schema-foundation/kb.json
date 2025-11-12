@@ -1,0 +1,12 @@
+{
+  "name": "schema-foundation",
+  "version": "1.0.0",
+  "description": "Core Schema.org validation rules and templates",
+  "defaultLanguage": "en",
+  "urlPolicy": {
+    "requireCanonical": true,
+    "allowHTTP": false
+  },
+  "globalRecommended": ["@context", "@type", "name", "description"]
+}
+

@@ -1,0 +1,35 @@
+{
+  "type": "Service",
+  "required": ["@context", "@type", "name"],
+  "recommended": ["description", "areaServed", "serviceType", "provider"],
+  "disallowed": ["aggregateRating", "offers.priceCurrency", "brand"],
+  "constraints": [
+    {
+      "path": "provider.@type",
+      "oneOf": ["Organization", "LocalBusiness"]
+    },
+    {
+      "path": "areaServed",
+      "type": "stringOrPlace",
+      "maxCount": 3
+    },
+    {
+      "path": "serviceType",
+      "type": "string",
+      "minLength": 3
+    }
+  ],
+  "fieldGuidance": {
+    "name": "Human-readable service name; avoid keyword stuffing.",
+    "description": "1–2 sentences, unique per page; plain text.",
+    "provider": "Organization or LocalBusiness with legalName or name.",
+    "areaServed": "City/region names or Place objects."
+  },
+  "examples": {
+    "good": "examples/Service.good.jsonld",
+    "minimal": "examples/Service.minimal.jsonld",
+    "bad": "examples/Service.bad.jsonld"
+  },
+  "template": "templates/Service.hbs"
+}
+
