@@ -6,14 +6,14 @@
 
 export const invokePrecogFunction = {
   name: "invoke_precog",
-  description: "Invoke a Precogs oracle to analyze schema or HTML content using domain-specific knowledge. Returns a job_id and stream URL for real-time results. Prefer inline content when user provides schema or HTML snippets.",
+  description: "Invoke a Precogs oracle to analyze schema, HTML content, or home issues using domain-specific knowledge. Returns a job_id and stream URL for real-time results. For home domain precogs, use content_source='inline' with the user's problem description, and include region/domain/vertical for location-specific context.",
   parameters: {
     type: "object",
     properties: {
       kb: {
         type: "string",
-        description: "Knowledge base identifier. Defaults to 'schema-foundation' for schema precog, 'general' otherwise.",
-        enum: ["general", "schema-foundation", "siding-services", "cladding"],
+        description: "Knowledge base identifier. Defaults to 'schema-foundation' for schema precog, 'home-foundation' for home precogs, 'general' otherwise.",
+        enum: ["general", "schema-foundation", "home-foundation", "siding-services", "cladding"],
         default: "schema-foundation",
       },
       precog: {
@@ -41,7 +41,19 @@ export const invokePrecogFunction = {
       },
       task: {
         type: "string",
-        description: "Task description or prompt. Defaults to 'validate' for schema precog, 'Run {precog}' otherwise.",
+        description: "Task description or prompt. Defaults to 'validate' for schema precog, 'Run {precog}' otherwise. For home precogs, use: 'diagnose', 'assess_risk', 'recommend_fixes', 'local_context', 'timing', 'cost_band', 'risk_projection'.",
+      },
+      region: {
+        type: "string",
+        description: "Geographic region (city, state, ZIP code, or location name). Required for home domain precogs to provide location-specific context and cost/timing data. Example: 'Naples, FL', '34102', 'Fort Myers'.",
+      },
+      domain: {
+        type: "string",
+        description: "Partner domain name (e.g., 'floodbarrierpros.com'). Used to filter and boost relevant factlets from specific partners. Optional but recommended for home domain precogs.",
+      },
+      vertical: {
+        type: "string",
+        description: "Service vertical (e.g., 'flood_protection', 'hvac', 'plumbing', 'electrical', 'roofing'). Used to filter relevant knowledge and factlets. Optional but recommended for home domain precogs.",
       },
     },
     required: ["precog"],
@@ -58,18 +70,21 @@ export async function executeInvokePrecog(args, baseUrl = "https://precogs.crout
 
   // Extract parameters with defaults
   const {
-    kb = args.precog === "schema" ? "schema-foundation" : "general",
+    kb = args.precog === "schema" ? "schema-foundation" : args.precog?.startsWith("home") ? "home-foundation" : "general",
     precog,
     content_source = "inline",
     content,
     url,
     type,
     task,
+    region,
+    domain,
+    vertical,
   } = args;
   
   // Validate kb is a known value
-  const validKBs = ["general", "schema-foundation", "siding-services", "cladding"];
-  const kbValue = validKBs.includes(kb) ? kb : (precog === "schema" ? "schema-foundation" : "general");
+  const validKBs = ["general", "schema-foundation", "home-foundation", "siding-services", "cladding"];
+  const kbValue = validKBs.includes(kb) ? kb : (precog === "schema" ? "schema-foundation" : precog?.startsWith("home") ? "home-foundation" : "general");
 
   // Validate required parameters
   if (!precog) {
@@ -94,6 +109,12 @@ export async function executeInvokePrecog(args, baseUrl = "https://precogs.crout
   }
   if (content_source === "url" && url) {
     context.url = url;
+  }
+  // Home domain specific context
+  if (precog?.startsWith("home")) {
+    if (region) context.region = region;
+    if (domain) context.domain = domain;
+    if (vertical) context.vertical = vertical;
   }
 
   // Default task based on precog type
