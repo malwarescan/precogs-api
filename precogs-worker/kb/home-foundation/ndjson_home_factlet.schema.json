@@ -1,0 +1,125 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Home Domain Factlet Schema",
+  "description": "Schema for validating home-domain factlets in NDJSON format",
+  "type": "object",
+  "required": ["@type", "@id"],
+  "properties": {
+    "@type": {
+      "type": "string",
+      "enum": ["Factlet", "System", "Component", "Environment", "CostBand", "Timing"]
+    },
+    "@id": {
+      "type": "string",
+      "format": "uri"
+    },
+    "@context": {
+      "type": "string",
+      "default": "https://croutons.ai/home"
+    },
+    "system": {
+      "type": "string",
+      "enum": ["hvac", "plumbing", "electrical", "roofing", "siding", "foundation", "flood_protection"]
+    },
+    "symptom": {
+      "type": "string",
+      "description": "Symptom description (e.g., 'warm air from AC')"
+    },
+    "cause": {
+      "type": "string",
+      "description": "Likely cause of symptom"
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"]
+    },
+    "recommended_action": {
+      "type": "string"
+    },
+    "professional_required": {
+      "type": "boolean"
+    },
+    "region": {
+      "type": "string",
+      "description": "ZIP code, city, county, or state"
+    },
+    "climate_profile": {
+      "type": "string",
+      "description": "Climate characteristics (e.g., 'high-humidity, coastal, UV-intense')"
+    },
+    "optimal_replacement_window": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Months when work is optimal"
+    },
+    "average_replacement_cost_low": {
+      "type": "number"
+    },
+    "average_replacement_cost_high": {
+      "type": "number"
+    },
+    "currency": {
+      "type": "string",
+      "default": "USD"
+    },
+    "domain": {
+      "type": "string",
+      "description": "Source domain (e.g., 'floodbarrierpros.com')"
+    },
+    "vertical": {
+      "type": "string",
+      "description": "Service vertical (e.g., 'flood_protection', 'hvac')"
+    },
+    "relationships": {
+      "type": "object",
+      "properties": {
+        "CAUSES": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "IS_SYMPTOM_OF": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "REQUIRES_PRO": {
+          "type": "boolean"
+        },
+        "COMMON_FIX": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "HAZARD_LEVEL": {
+          "type": "string",
+          "enum": ["none", "minor", "moderate", "severe"]
+        },
+        "OPTIMAL_WINDOW_FOR": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "TYPICAL_COST_BAND_IN": {
+          "type": "object",
+          "properties": {
+            "low": {"type": "number"},
+            "high": {"type": "number"},
+            "currency": {"type": "string"}
+          }
+        },
+        "MORE_LIKELY_IN_CLIMATE": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}
+

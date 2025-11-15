@@ -19,7 +19,7 @@ export const invokePrecogFunction = {
       precog: {
         type: "string",
         description: "Precog type to invoke",
-        enum: ["schema", "faq", "pricing"],
+        enum: ["schema", "faq", "pricing", "home", "home.hvac", "home.plumbing", "home.electrical", "home.safety", "home.safety.mold", "home.flood"],
       },
       content_source: {
         type: "string",

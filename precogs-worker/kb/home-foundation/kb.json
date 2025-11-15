@@ -1,0 +1,25 @@
+{
+  "name": "home-foundation",
+  "version": "1.0.0",
+  "description": "Home domain knowledge base for HVAC, plumbing, electrical, safety, and regional context",
+  "defaultLanguage": "en",
+  "domains": [
+    "hvac",
+    "plumbing",
+    "electrical",
+    "safety",
+    "flood_protection",
+    "roofing",
+    "siding",
+    "foundation"
+  ],
+  "regionSupport": {
+    "enabled": true,
+    "levels": ["zip", "city", "county", "state"]
+  },
+  "costBandSupport": {
+    "enabled": true,
+    "currency": "USD"
+  }
+}
+

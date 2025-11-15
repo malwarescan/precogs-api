@@ -1,0 +1,48 @@
+{
+  "type": "Home",
+  "systems": [
+    "hvac",
+    "plumbing",
+    "electrical",
+    "roofing",
+    "siding",
+    "foundation",
+    "flood_protection"
+  ],
+  "tasks": {
+    "diagnose": {
+      "description": "Diagnose issues from symptoms",
+      "output_fields": ["assessment", "likely_causes", "recommended_steps", "triage_level"]
+    },
+    "assess_risk": {
+      "description": "Assess risk level for home systems",
+      "output_fields": ["risk_score", "dangerous_conditions", "triage_level"]
+    },
+    "recommend_fixes": {
+      "description": "Recommend fixes for identified issues",
+      "output_fields": ["recommended_steps", "requires_pro", "cost_band"]
+    },
+    "local_context": {
+      "description": "Provide local context for home in specific region",
+      "output_fields": ["location_context", "timing_recommendation", "cost_band", "risk_projection"]
+    },
+    "timing": {
+      "description": "Recommend optimal timing for work",
+      "output_fields": ["timing_recommendation", "optimal_window"]
+    },
+    "cost_band": {
+      "description": "Estimate cost ranges for work",
+      "output_fields": ["cost_band"]
+    },
+    "risk_projection": {
+      "description": "Project risk over time",
+      "output_fields": ["risk_projection"]
+    }
+  },
+  "queryHooks": {
+    "byDomain": true,
+    "byRegion": true,
+    "byVertical": true
+  }
+}
+

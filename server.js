@@ -455,7 +455,7 @@ app.post("/v1/run.ndjson", async (req, res) => {
     }
 
     const ctx = {
-      kb: kb || (precog === "schema" ? "schema-foundation" : "general"),
+      kb: kb || (precog === "schema" ? "schema-foundation" : precog.startsWith("home") ? "home-foundation" : "general"),
       content_source,
     };
     if (type) ctx.type = type;
@@ -464,6 +464,12 @@ app.post("/v1/run.ndjson", async (req, res) => {
     }
     if (content_source === "url" && url) {
       ctx.url = url;
+    }
+    // Home precog specific context
+    if (precog.startsWith("home")) {
+      if (req.body.region) ctx.region = req.body.region;
+      if (req.body.domain) ctx.domain = req.body.domain;
+      if (req.body.vertical) ctx.vertical = req.body.vertical;
     }
 
     const jobTask = task || (precog === "schema" ? "validate" : `Run ${precog}`);

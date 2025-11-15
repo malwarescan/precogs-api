@@ -7,6 +7,7 @@ import {
   buildRecommendations,
   prettyPrintResult,
 } from "./src/validateSchema.js";
+import { processHomePrecog } from "./src/homePrecog.js";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
 import "dotenv/config";
@@ -79,11 +80,14 @@ async function initConsumerGroup() {
 
 async function processJob(jobId, precog, prompt, context, retryCount = 0) {
   const startTime = Date.now();
-  const kb = context?.kb || "general";
-  const contentSource = context?.content_source || "url";
+  const kb = context?.kb || (precog.startsWith("home") ? "home-foundation" : "general");
+  const contentSource = context?.content_source || "inline";
   const content = context?.content;
   const url = context?.url;
   const type = context?.type;
+  const region = context?.region;
+  const domain = context?.domain;
+  const vertical = context?.vertical;
 
   console.log(`[worker] Processing job ${jobId}: precog=${precog}, kb=${kb}, source=${contentSource}, retry=${retryCount}`);
 
@@ -91,8 +95,35 @@ async function processJob(jobId, precog, prompt, context, retryCount = 0) {
     // Update job status to running
     await updateJobStatus(jobId, "running");
 
+    // Process home domain precogs
+    if (precog.startsWith("home")) {
+      const task = context?.task || "diagnose";
+      const emit = async (type, data) => {
+        await insertEvent(jobId, type, data);
+      };
+      
+      // Pass full context including region/domain/vertical
+      const homeContext = {
+        ...context,
+        region,
+        domain,
+        vertical,
+        content,
+        task,
+      };
+      
+      await processHomePrecog(jobId, precog, task, homeContext, emit);
+      
+      // Mark as complete after home precog finishes
+      await insertEvent(jobId, "answer.complete", { ok: true });
+      await updateJobStatus(jobId, "done");
+      
+      const elapsed = Date.now() - startTime;
+      console.log(`[worker] Completed job ${jobId} in ${elapsed}ms`);
+      return { success: true, elapsed };
+    }
     // Process schema precog with KB validation
-    if (precog === "schema" && kb === "schema-foundation") {
+    else if (precog === "schema" && kb === "schema-foundation") {
       const kbData = getKB(kb);
       
       await insertEvent(jobId, "grounding.chunk", {
