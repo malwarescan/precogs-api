@@ -185,6 +185,38 @@ function getNDJSONUrlForDomain(domain) {
 }
 
 /**
+ * Get connected partners for a given vertical and region
+ * @param {string} vertical - Service vertical (e.g., "flood_protection")
+ * @param {string} region - Geographic region (optional)
+ * @returns {Array} Array of connected partner objects
+ */
+function getConnectedPartners(vertical, region = null) {
+  const partners = {
+    "flood_protection": [
+      {
+        domain: "floodbarrierpros.com",
+        name: "FloodBarrierPros",
+        ndjson_url: "https://floodbarrierpros.com/sitemaps/sitemap-ai.ndjson",
+        regions: ["FL", "Florida", "Fort Myers", "Naples", "Miami", "Tampa", "Orlando"], // All FL regions
+      },
+    ],
+    // Add more verticals as partners are added
+  };
+
+  const verticalPartners = partners[vertical] || [];
+  
+  // Filter by region if provided
+  if (region) {
+    const regionLower = region.toLowerCase();
+    return verticalPartners.filter(p => 
+      p.regions.some(r => regionLower.includes(r.toLowerCase()) || r.toLowerCase().includes(regionLower))
+    );
+  }
+  
+  return verticalPartners;
+}
+
+/**
  * Execute home domain task
  * @param {string} task - Task type
  * @param {Array} factlets - Relevant factlets from graph
@@ -254,45 +286,65 @@ function diagnoseTask(factlets, context) {
     recommendedSteps.push("Check system", "Monitor closely", "Call professional if needed");
   }
 
-  // Extract cost_band and when from factlets if domain is floodbarrierpros.com
+  // Extract cost_band and when from factlets from connected partners
   let costBand = null;
   let when = null;
+  let partnerInfo = null;
 
-  if (domain === "floodbarrierpros.com" && factlets && factlets.length > 0) {
-    // Normalize region for matching (extract city name)
-    const regionNormalized = region ? region.toLowerCase().split(",")[0].trim() : "";
+  // Get connected partners for this vertical
+  const connectedPartners = getConnectedPartners(vertical || "flood_protection", region);
+  
+  if (connectedPartners.length > 0 && factlets && factlets.length > 0) {
+    // Find factlets from connected partners
+    const partnerDomains = connectedPartners.map(p => p.domain);
+    const partnerFactlets = factlets.filter(f => {
+      const factletDomain = f.domain || f["@id"]?.match(/https?:\/\/([^\/]+)/)?.[1];
+      return partnerDomains.includes(factletDomain);
+    });
     
-    // Find factlet matching region or use first one
-    const matchingFactlet = factlets.find(f => {
-      if (!regionNormalized) return false;
+    if (partnerFactlets.length > 0) {
+      // Normalize region for matching (extract city name)
+      const regionNormalized = region ? region.toLowerCase().split(",")[0].trim() : "";
       
-      // Check various location fields
-      const fLocation = (f.location || f.region || "").toLowerCase();
-      const fId = (f["@id"] || "").toLowerCase();
-      const fName = (f.name || "").toLowerCase();
+      // Find factlet matching region or use first one
+      const matchingFactlet = partnerFactlets.find(f => {
+        if (!regionNormalized) return false;
+        
+        // Check various location fields
+        const fLocation = (f.location || f.region || "").toLowerCase();
+        const fId = (f["@id"] || "").toLowerCase();
+        const fName = (f.name || "").toLowerCase();
+        
+        return fLocation.includes(regionNormalized) ||
+               fId.includes(regionNormalized) ||
+               fName.includes(regionNormalized);
+      }) || partnerFactlets[0];
       
-      return fLocation.includes(regionNormalized) ||
-             fId.includes(regionNormalized) ||
-             fName.includes(regionNormalized);
-    }) || factlets[0];
+      // Get partner info
+      const factletDomain = matchingFactlet.domain || matchingFactlet["@id"]?.match(/https?:\/\/([^\/]+)/)?.[1];
+      partnerInfo = connectedPartners.find(p => p.domain === factletDomain);
 
-    // Extract cost_range -> cost_band
-    if (matchingFactlet.cost_range) {
-      costBand = matchingFactlet.cost_range;
-    } else if (matchingFactlet.cost_p50) {
-      // Fallback: use median cost as estimate
-      costBand = `~${matchingFactlet.cost_p50}`;
-    }
+      // Extract cost_range -> cost_band
+      if (matchingFactlet.cost_range) {
+        costBand = matchingFactlet.cost_range;
+      } else if (matchingFactlet.cost_p50) {
+        // Fallback: use median cost as estimate
+        costBand = `~${matchingFactlet.cost_p50}`;
+      }
 
-    // Extract best_season -> when
-    if (matchingFactlet.best_season) {
-      when = matchingFactlet.best_season;
-    } else if (matchingFactlet.typical_duration) {
-      // Fallback: use typical_duration if best_season not available
-      when = matchingFactlet.typical_duration;
+      // Extract best_season -> when
+      if (matchingFactlet.best_season) {
+        when = matchingFactlet.best_season;
+      } else if (matchingFactlet.typical_duration) {
+        // Fallback: use typical_duration if best_season not available
+        when = matchingFactlet.typical_duration;
+      }
     }
   }
 
+  // Get connected partners for recommendations
+  const connectedPartners = getConnectedPartners(vertical || "flood_protection", region);
+  
   const result = {
     assessment: assessment,
     risk_score: riskScore,
@@ -302,12 +354,28 @@ function diagnoseTask(factlets, context) {
     triage_level: riskScore > 0.6 ? "caution" : "safe",
   };
 
-  // Add cost_band and when if extracted from factlets
+  // Add cost_band and when if extracted from connected partners
   if (costBand) {
     result.cost_band = costBand;
   }
   if (when) {
     result.when = when;
+  }
+  
+  // Add partner information
+  if (partnerInfo) {
+    result.recommended_partner = {
+      name: partnerInfo.name,
+      domain: partnerInfo.domain,
+    };
+  }
+  
+  // Add list of connected partners for this vertical/region
+  if (connectedPartners.length > 0) {
+    result.connected_partners = connectedPartners.map(p => ({
+      name: p.name,
+      domain: p.domain,
+    }));
   }
 
   return result;
@@ -406,15 +474,67 @@ function timingTask(factlets, context) {
 
 /**
  * Cost band task handler
+ * Only returns cost data from connected partners
  */
 function costBandTask(factlets, context) {
+  const region = context?.region || "";
+  const vertical = context?.vertical || "";
+  
+  // Get connected partners for this vertical/region
+  const connectedPartners = getConnectedPartners(vertical, region);
+  
+  // Extract cost data from factlets (only from connected partners)
+  let costBand = null;
+  let partnerInfo = null;
+  
+  if (factlets && factlets.length > 0 && connectedPartners.length > 0) {
+    // Find factlets from connected partners
+    const partnerDomains = connectedPartners.map(p => p.domain);
+    const partnerFactlets = factlets.filter(f => {
+      const factletDomain = f.domain || f["@id"]?.match(/https?:\/\/([^\/]+)/)?.[1];
+      return partnerDomains.includes(factletDomain);
+    });
+    
+    if (partnerFactlets.length > 0) {
+      // Use first matching factlet
+      const factlet = partnerFactlets[0];
+      
+      if (factlet.cost_range) {
+        costBand = factlet.cost_range;
+      } else if (factlet.cost_p50) {
+        costBand = `~${factlet.cost_p50}`;
+      }
+      
+      // Get partner info
+      const factletDomain = factlet.domain || factlet["@id"]?.match(/https?:\/\/([^\/]+)/)?.[1];
+      partnerInfo = connectedPartners.find(p => p.domain === factletDomain);
+    }
+  }
+  
+  // If no cost data from partners, return null (don't show generic estimates)
+  if (!costBand) {
+    return {
+      cost_band: null,
+      message: connectedPartners.length > 0 
+        ? "Cost data not available for this location from connected partners."
+        : "No connected partners available for this service in your area.",
+      connected_partners: connectedPartners.map(p => ({
+        name: p.name,
+        domain: p.domain,
+      })),
+    };
+  }
+  
   return {
-    cost_band: {
-      low: 5000,
-      high: 15000,
-      currency: "USD",
-      confidence: 0.8,
-    },
+    cost_band: costBand,
+    partner: partnerInfo ? {
+      name: partnerInfo.name,
+      domain: partnerInfo.domain,
+    } : null,
+    connected_partners: connectedPartners.map(p => ({
+      name: p.name,
+      domain: p.domain,
+    })),
   };
 }
 
@@ -541,6 +661,24 @@ async function emitAnswer(result, emit) {
     for (const item of result.when_to_call_pro) {
       await emit("answer.delta", {
         text: `  • ${item}\n`,
+      });
+    }
+  }
+
+  // Emit partner information
+  if (result.recommended_partner) {
+    await emit("answer.delta", {
+      text: `\nRecommended Partner: ${result.recommended_partner.name} (${result.recommended_partner.domain})\n`,
+    });
+  }
+
+  if (result.connected_partners && result.connected_partners.length > 0) {
+    await emit("answer.delta", {
+      text: `\nAvailable Partners in Your Area:\n`,
+    });
+    for (const partner of result.connected_partners) {
+      await emit("answer.delta", {
+        text: `  • ${partner.name} (${partner.domain})\n`,
       });
     }
   }
