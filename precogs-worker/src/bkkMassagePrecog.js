@@ -27,25 +27,28 @@ export async function processBkkMassagePrecog(jobId, namespace, task, context, e
   try {
     // Emit thinking/analyzing event
     await emit("thinking", {
-      message: "Fetching data from Google Maps...",
+      message: "Fetching and merging Bangkok massage data...",
       status: "analyzing",
     });
 
-    // Fetch data from Google Maps
-    const shopsData = await fetchGoogleMapsData(emit);
+    // Fetch live data from Google Maps
+    const liveShops = await fetchGoogleMapsData(emit);
+
+    // Call Croutons Merge Service to merge with corpus data
+    const mergedShops = await mergeWithCorpus(liveShops, region, emit);
 
     // Emit grounding event
     await emit("grounding.chunk", {
-      count: shopsData.length,
-      source: `Google Maps: ${GOOGLE_MAPS_URL}`,
+      count: mergedShops.length,
+      source: `Croutons Merge Service + Google Maps`,
       namespace: namespace,
       task: task,
-      shops_loaded: shopsData.length,
+      shops_loaded: mergedShops.length,
     });
 
     // Process task-specific logic
     const result = await executeBkkMassageTask(task, {
-      shopsData,
+      shopsData: mergedShops,
       content,
       region,
     }, emit);
@@ -64,6 +67,47 @@ export async function processBkkMassagePrecog(jobId, namespace, task, context, e
       text: `⚠️ Error processing ${task}: ${error.message}\n`,
     });
     throw error;
+  }
+}
+
+/**
+ * Merge live Google Maps data with corpus via Croutons Merge Service
+ * @param {Array} liveShops - Shops from Google Maps
+ * @param {string} region - District name
+ * @param {Function} emit - Event emitter
+ * @returns {Promise<Array>} Merged shop data
+ */
+async function mergeWithCorpus(liveShops, region, emit) {
+  const mergeApiUrl = process.env.BKK_MERGE_API_URL || "https://croutons-merge-service.up.railway.app/v1/merge/bkk_massage";
+  
+  try {
+    await emit("thinking", {
+      message: "Merging with verified corpus data...",
+      status: "merging",
+    });
+
+    const response = await fetch(mergeApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        liveShops,
+        district: region,
+        mergeStrategy: "enrich_with_corpus",
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn(`[bkk-massage] Merge service failed: ${response.status}, using live data only`);
+      return liveShops; // Fallback to live data
+    }
+
+    const result = await response.json();
+    return result.shops || liveShops;
+  } catch (error) {
+    console.warn(`[bkk-massage] Merge service error: ${error.message}, using live data only`);
+    return liveShops; // Fallback to live data
   }
 }
 
