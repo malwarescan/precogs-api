@@ -342,8 +342,7 @@ function diagnoseTask(factlets, context) {
     }
   }
 
-  // Get connected partners for recommendations
-  const connectedPartners = getConnectedPartners(vertical || "flood_protection", region);
+  // connectedPartners already declared above, using it for recommendations
   
   const result = {
     assessment: assessment,
