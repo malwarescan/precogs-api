@@ -6,7 +6,7 @@
 
 export const invokePrecogFunction = {
   name: "invoke_precog",
-  description: "Invoke a Precogs oracle to analyze schema, HTML content, or home issues using domain-specific knowledge. Returns a job_id and stream URL for real-time results. For home domain precogs, use content_source='inline' with the user's problem description, and include region/domain/vertical for location-specific context.",
+  description: "Invoke a Precogs oracle to analyze schema, HTML content, or home issues using domain-specific knowledge. Returns a job_id and stream URL for real-time results. For home domain precogs, use content_source='inline' with the user's problem description, and include region/domain/vertical for location-specific context. For Bangkok massage queries, use precog='bkk_massage' to get safety-verified shop recommendations, district information, pricing, and risk assessments.",
   parameters: {
     type: "object",
     properties: {
@@ -19,7 +19,7 @@ export const invokePrecogFunction = {
       precog: {
         type: "string",
         description: "Precog type to invoke",
-        enum: ["schema", "faq", "pricing", "home", "home.hvac", "home.plumbing", "home.electrical", "home.safety", "home.safety.mold", "home.flood"],
+        enum: ["schema", "faq", "pricing", "home", "home.hvac", "home.plumbing", "home.electrical", "home.safety", "home.safety.mold", "home.flood", "bkk_massage"],
       },
       content_source: {
         type: "string",

@@ -11,6 +11,7 @@
 
 import OpenAI from "openai";
 import { invokePrecogFunction, executeInvokePrecog } from "../functions/invoke_precog.js";
+import { invokeBkkMergeFunction, executeInvokeBkkMerge } from "../functions/invoke_bkk_merge.js";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -21,6 +22,7 @@ const openai = new OpenAI({
  */
 const SYSTEM_PROMPT = `You are a helpful assistant that can invoke Precogs oracles to analyze schema, HTML, or web pages using domain-specific knowledge.
 
+**For Schema/HTML Analysis:**
 When a user provides schema or HTML content in chat, call invoke_precog with:
 - kb="schema-foundation" (for schema precog)
 - precog="schema"
@@ -31,7 +33,19 @@ When a user provides schema or HTML content in chat, call invoke_precog with:
 
 Only use content_source="url" if the user explicitly provides a URL to analyze.
 
-After calling the function, always provide the stream_url or cli_url so the user can watch results in real-time.
+**For Bangkok Massage Queries:**
+When users ask about massage services in Bangkok, you MUST call invoke_bkk_merge with:
+- content: User's full question about Bangkok massage
+- task: Infer from user intent:
+  - "district_aware_ranking" - User asks for recommendations (default)
+  - "legitimacy_scoring" - User asks if a shop is legitimate/safe
+  - "safety_pattern_recognition" - User asks about safety patterns
+  - "price_sanity_checking" - User asks about pricing
+- region: Extract district from user message if mentioned (Asok, Nana, Phrom Phong, Thonglor, Ekkamai, Silom, Ari, Victory Monument, Ratchada, Old City)
+
+After calling invoke_precog, always provide the stream_url or cli_url so the user can watch results in real-time.
+
+After calling invoke_bkk_merge, format the response into a friendly answer listing shops with ratings, pricing, Line usernames, websites, and safety information.
 
 Be concise and helpful.`;
 
@@ -73,7 +87,7 @@ export async function* callWithFunctionCalling(userMessage, conversationHistory 
     const stream = await openai.chat.completions.create({
       model: model,
       messages: messages,
-      functions: [invokePrecogFunction],
+      functions: [invokePrecogFunction, invokeBkkMergeFunction],
       function_call: "auto", // Let model decide when to call function
       stream: true,
       temperature: temperature,
@@ -140,10 +154,21 @@ export async function* callWithFunctionCalling(userMessage, conversationHistory 
 
         // Execute the function
         try {
-          const functionResult = await executeInvokePrecog(
-            functionArgs,
-            process.env.PRECOGS_BASE_URL || "https://precogs.croutons.ai"
-          );
+          let functionResult;
+          
+          if (functionCallName === "invoke_precog") {
+            functionResult = await executeInvokePrecog(
+              functionArgs,
+              process.env.PRECOGS_BASE_URL || "https://precogs.croutons.ai"
+            );
+          } else if (functionCallName === "invoke_bkk_merge") {
+            functionResult = await executeInvokeBkkMerge(
+              functionArgs,
+              process.env.BKK_MERGE_API_URL || null
+            );
+          } else {
+            throw new Error(`Unknown function: ${functionCallName}`);
+          }
 
           // Add function call and result to conversation
           messages.push({
@@ -240,7 +265,7 @@ export async function callWithFunctionCallingSync(userMessage, conversationHisto
     const response = await openai.chat.completions.create({
       model: "gpt-4",
       messages: messages,
-      functions: [invokePrecogFunction],
+      functions: [invokePrecogFunction, invokeBkkMergeFunction],
       function_call: "auto",
     });
 
@@ -251,12 +276,25 @@ export async function callWithFunctionCallingSync(userMessage, conversationHisto
       const functionName = message.function_call.name;
       const functionArgs = JSON.parse(message.function_call.arguments);
 
+      let functionResult;
+      
       if (functionName === "invoke_precog") {
         // Execute function
-        const functionResult = await executeInvokePrecog(
+        functionResult = await executeInvokePrecog(
           functionArgs,
           process.env.PRECOGS_BASE_URL || "https://precogs.croutons.ai"
         );
+      } else if (functionName === "invoke_bkk_merge") {
+        // Execute Bangkok merge function
+        functionResult = await executeInvokeBkkMerge(
+          functionArgs,
+          process.env.BKK_MERGE_API_URL || null
+        );
+      } else {
+        throw new Error(`Unknown function: ${functionName}`);
+      }
+      
+      if (functionResult) {
 
         // Add function call and result to conversation
         messages.push(message);

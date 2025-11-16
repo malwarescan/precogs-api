@@ -471,6 +471,10 @@ app.post("/v1/run.ndjson", async (req, res) => {
       if (req.body.domain) ctx.domain = req.body.domain;
       if (req.body.vertical) ctx.vertical = req.body.vertical;
     }
+    // Bangkok Massage precog specific context
+    if (precog === "bkk_massage") {
+      if (req.body.region) ctx.region = req.body.region; // District name
+    }
 
     const jobTask = task || (precog === "schema" ? "validate" : `Run ${precog}`);
 

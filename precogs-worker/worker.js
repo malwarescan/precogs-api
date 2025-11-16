@@ -8,6 +8,7 @@ import {
   prettyPrintResult,
 } from "./src/validateSchema.js";
 import { processHomePrecog } from "./src/homePrecog.js";
+import { processBkkMassagePrecog } from "./src/bkkMassagePrecog.js";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
 import "dotenv/config";
@@ -115,6 +116,31 @@ async function processJob(jobId, precog, prompt, context, retryCount = 0) {
       await processHomePrecog(jobId, precog, task, homeContext, emit);
       
       // Mark as complete after home precog finishes
+      await insertEvent(jobId, "answer.complete", { ok: true });
+      await updateJobStatus(jobId, "done");
+      
+      const elapsed = Date.now() - startTime;
+      console.log(`[worker] Completed job ${jobId} in ${elapsed}ms`);
+      return { success: true, elapsed };
+    }
+    // Process Bangkok Massage precog
+    else if (precog === "bkk_massage") {
+      const task = context?.task || "district_aware_ranking";
+      const emit = async (type, data) => {
+        await insertEvent(jobId, type, data);
+      };
+      
+      // Pass full context including region (district)
+      const bkkContext = {
+        ...context,
+        region, // District name (Asok, Nana, etc.)
+        content,
+        task,
+      };
+      
+      await processBkkMassagePrecog(jobId, precog, task, bkkContext, emit);
+      
+      // Mark as complete after bkk massage precog finishes
       await insertEvent(jobId, "answer.complete", { ok: true });
       await updateJobStatus(jobId, "done");
       
