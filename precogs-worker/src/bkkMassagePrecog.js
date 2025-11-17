@@ -18,12 +18,16 @@ function loadCorpusShops(district = null) {
     
     // Try multiple paths to find corpus (from worker file location)
     // Worker is at: precogs-api/precogs-worker/src/bkkMassagePrecog.js
-    // Corpus is at: corpora/thailand/bangkok/massage/shops_legit.ndjson (from repo root)
+    // Corpus can be at:
+    //  1. precogs-api/precogs-worker/corpora/... (copied into worker dir - PREFERRED)
+    //  2. corpora/... (from repo root)
     const corpusPaths = [
+      join(__dirname, '../../corpora/thailand/bangkok/massage/shops_legit.ndjson'), // From src/ to worker/corpora/ (PREFERRED)
       join(__dirname, '../../../../../corpora/thailand/bangkok/massage/shops_legit.ndjson'), // From src/ up to repo root
       join(__dirname, '../../../../corpora/thailand/bangkok/massage/shops_legit.ndjson'),
       join(__dirname, '../../../corpora/thailand/bangkok/massage/shops_legit.ndjson'),
       join(process.cwd(), 'corpora/thailand/bangkok/massage/shops_legit.ndjson'),
+      join(process.cwd(), 'precogs-worker/corpora/thailand/bangkok/massage/shops_legit.ndjson'),
       join(process.cwd(), '../corpora/thailand/bangkok/massage/shops_legit.ndjson'),
     ];
     
