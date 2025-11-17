@@ -16,40 +16,61 @@ function loadCorpusShops(district = null) {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
     
-    // Try multiple paths to find corpus
+    // Try multiple paths to find corpus (from worker file location)
+    // Worker is at: precogs-api/precogs-worker/src/bkkMassagePrecog.js
+    // Corpus is at: corpora/thailand/bangkok/massage/shops_legit.ndjson (from repo root)
     const corpusPaths = [
+      join(__dirname, '../../../../../corpora/thailand/bangkok/massage/shops_legit.ndjson'), // From src/ up to repo root
       join(__dirname, '../../../../corpora/thailand/bangkok/massage/shops_legit.ndjson'),
       join(__dirname, '../../../corpora/thailand/bangkok/massage/shops_legit.ndjson'),
       join(process.cwd(), 'corpora/thailand/bangkok/massage/shops_legit.ndjson'),
+      join(process.cwd(), '../corpora/thailand/bangkok/massage/shops_legit.ndjson'),
     ];
+    
+    console.log(`[bkk-massage] Looking for corpus file...`);
+    console.log(`[bkk-massage] __dirname: ${__dirname}`);
+    console.log(`[bkk-massage] process.cwd(): ${process.cwd()}`);
     
     let corpusPath = null;
     for (const path of corpusPaths) {
+      console.log(`[bkk-massage] Checking: ${path} (exists: ${existsSync(path)})`);
       if (existsSync(path)) {
         corpusPath = path;
+        console.log(`[bkk-massage] ✅ Found corpus at: ${corpusPath}`);
         break;
       }
     }
     
     if (!corpusPath) {
-      console.warn('[bkk-massage] Corpus file not found, trying merge service');
+      console.error('[bkk-massage] ❌ Corpus file not found in any of the checked paths');
+      console.error('[bkk-massage] Tried paths:', corpusPaths);
       return [];
     }
     
     const content = readFileSync(corpusPath, 'utf-8');
-    const shops = content
+    const allShops = content
       .split('\n')
       .filter(line => line.trim())
-      .map(line => JSON.parse(line))
-      .filter(shop => {
-        if (!district) return true;
-        return shop.district && shop.district.toLowerCase() === district.toLowerCase();
-      });
+      .map(line => {
+        try {
+          return JSON.parse(line);
+        } catch (e) {
+          console.warn(`[bkk-massage] Failed to parse line: ${e.message}`);
+          return null;
+        }
+      })
+      .filter(shop => shop !== null);
     
-    console.log(`[bkk-massage] Loaded ${shops.length} shops from corpus${district ? ` in ${district}` : ''}`);
+    // Filter by district if provided
+    const shops = district 
+      ? allShops.filter(shop => shop.district && shop.district.toLowerCase() === district.toLowerCase())
+      : allShops;
+    
+    console.log(`[bkk-massage] ✅ Loaded ${shops.length} shops from corpus${district ? ` in ${district}` : ''} (total: ${allShops.length})`);
     return shops;
   } catch (error) {
-    console.warn(`[bkk-massage] Failed to load corpus: ${error.message}`);
+    console.error(`[bkk-massage] ❌ Failed to load corpus: ${error.message}`);
+    console.error(error.stack);
     return [];
   }
 }
@@ -104,7 +125,7 @@ export async function processBkkMassagePrecog(jobId, namespace, task, context, e
     // Emit grounding event
     await emit("grounding.chunk", {
       count: mergedShops.length,
-      source: `Croutons Merge Service + Google Maps`,
+      source: mergedShops.length > 0 ? `Corpus data (${corpusShops.length} shops)` : 'No data available',
       namespace: namespace,
       task: task,
       shops_loaded: mergedShops.length,
