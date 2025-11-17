@@ -31,10 +31,20 @@ export async function processBkkMassagePrecog(jobId, namespace, task, context, e
       status: "analyzing",
     });
 
-    // Fetch live data from Google Maps
-    const liveShops = await fetchGoogleMapsData(emit);
+    // Fetch live data from Google Maps (may return empty if scraping fails)
+    let liveShops = [];
+    try {
+      liveShops = await fetchGoogleMapsData(emit);
+    } catch (error) {
+      console.warn(`[bkk-massage] Google Maps fetch failed: ${error.message}, using corpus only`);
+      await emit("thinking", {
+        message: "Using verified corpus data (Google Maps unavailable)",
+        status: "fallback",
+      });
+    }
 
     // Call Croutons Merge Service to merge with corpus data
+    // If liveShops is empty, merge service will return corpus data
     const mergedShops = await mergeWithCorpus(liveShops, region, emit);
 
     // Emit grounding event
