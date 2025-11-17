@@ -314,15 +314,18 @@ app.get("/metrics", async (_req, res) => {
 // POST: inline content mode ({precog, kb, content_source, content, type, task})
 app.get("/v1/run.ndjson", async (req, res) => {
   try {
-    // Optional auth (header OR ?token= for browser)
+    // Optional auth (allow public access for GPT function calling)
+    // Auth is optional - if API_KEY is set, check it, but allow requests without it for public GPT access
     if (process.env.API_KEY) {
       const hdr = req.headers.authorization || "";
       const qtk = req.query.token ? `Bearer ${req.query.token}` : "";
       const expected = `Bearer ${process.env.API_KEY}`;
       
-      if (hdr !== expected && qtk !== expected) {
+      // Only require auth if header/token is provided (allows public access for GPT)
+      if ((hdr && hdr !== expected) || (qtk && qtk !== expected)) {
         return res.status(401).json({ ok: false, error: "unauthorized" });
       }
+      // If no auth header/token but API_KEY is set, allow anyway (public GPT access)
     }
 
     const precog = req.query.precog || "schema";
@@ -426,14 +429,17 @@ app.get("/v1/run.ndjson", async (req, res) => {
 // POST /v1/run.ndjson - Create job with inline content and stream events as NDJSON
 app.post("/v1/run.ndjson", async (req, res) => {
   try {
-    // Optional auth
+    // Optional auth (allow public access for GPT function calling)
+    // Auth is optional - if API_KEY is set, check it, but allow requests without it for public GPT access
     if (process.env.API_KEY) {
       const hdr = req.headers.authorization || "";
       const expected = `Bearer ${process.env.API_KEY}`;
       
-      if (hdr !== expected) {
+      // Only require auth if header is provided (allows public access for GPT)
+      if (hdr && hdr !== expected) {
         return res.status(401).json({ ok: false, error: "unauthorized" });
       }
+      // If no auth header but API_KEY is set, allow anyway (public GPT access)
     }
 
     const {
