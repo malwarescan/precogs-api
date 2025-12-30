@@ -1,0 +1,7 @@
+export default {
+  apiUrl: process.env.CROUTONS_API_URL || '{{API_URL}}',
+  apiKey: process.env.CROUTONS_API_KEY || '{{API_KEY}}',
+  datasetId: '{{DATASET_ID}}',
+  site: '{{SITE}}'
+};
+

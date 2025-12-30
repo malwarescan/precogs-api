@@ -1,0 +1,11 @@
+{
+  "generated_at": "2025-11-16T17:57:53.682Z",
+  "total_triples": 199,
+  "triple_types": {
+    "located_in": 32,
+    "has_safety_signal": 101,
+    "has_risk_factor": 31,
+    "has_price_band": 20,
+    "is_verified_safe_for": 15
+  }
+}

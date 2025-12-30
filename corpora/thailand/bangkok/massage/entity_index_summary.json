@@ -1,0 +1,121 @@
+{
+  "generated_at": "2025-11-16T17:57:54.375Z",
+  "corpus_path": "/Users/malware/Desktop/croutons.ai/corpora/thailand/bangkok/massage",
+  "entity_counts": {
+    "MassageShop": {
+      "legitimate": 20,
+      "risky": 12,
+      "total": 32
+    },
+    "District": 10,
+    "SafetySignal": 8,
+    "ScamPattern": 8,
+    "EtiquetteRule": 10,
+    "PriceTier": 20,
+    "FemaleSafeSpace": 15
+  },
+  "primary_entity": "MassageShop",
+  "entities": {
+    "MassageShop": {
+      "legitimate": [
+        "Health Land Asok",
+        "Let's Relax Asok",
+        "Health Land Phrom Phong",
+        "Asia Herb Association Phrom Phong",
+        "Divana Massage & Spa Thonglor",
+        "Coran Boutique Spa Thonglor",
+        "Health Land Ekkamai",
+        "Urban Retreat Ekkamai",
+        "Health Land Silom",
+        "Oasis Spa Silom",
+        "Ari Massage Studio",
+        "Baan Sabai Ari",
+        "Health Land Victory Monument",
+        "Ratchada Traditional Massage",
+        "Wat Pho Massage School Old City",
+        "Lek Massage Old City",
+        "Nana Traditional Massage",
+        "Baan Sabai Nana",
+        "Urban Retreat Nana",
+        "Coran Boutique Spa Phrom Phong"
+      ],
+      "risky": [
+        "Unknown Shop Nana Soi 4",
+        "Unverified Shop Silom Alley",
+        "Suspicious Shop Nana Soi 7",
+        "Unverified Shop Old City Backstreet",
+        "Risky Shop Victory Monument",
+        "Unverified Shop Ratchada",
+        "Suspicious Shop Nana Soi 3",
+        "Unverified Shop Silom Soi 4",
+        "Risky Shop Old City Market",
+        "Unverified Shop Nana Soi 6",
+        "Suspicious Shop Victory Monument Alley",
+        "Unverified Shop Ratchada Night Market"
+      ],
+      "total": 32
+    },
+    "District": [
+      "Asok",
+      "Nana",
+      "Phrom Phong",
+      "Thonglor",
+      "Ekkamai",
+      "Silom",
+      "Ari",
+      "Victory Monument",
+      "Ratchada",
+      "Old City"
+    ],
+    "SafetySignal": [
+      "uniforms",
+      "open_storefront",
+      "posted_menu",
+      "visible_reception",
+      "professional_branding",
+      "franchise_chains",
+      "online_reviews",
+      "licensed_display"
+    ],
+    "ScamPattern": [
+      "bait_and_switch",
+      "extra_fee_pressure",
+      "menu_upselling",
+      "hidden_surcharges",
+      "unlisted_pricing",
+      "dark_entry",
+      "unsolicited_offers",
+      "no_reception"
+    ],
+    "EtiquetteRule": [
+      "clothing",
+      "clothing",
+      "tipping",
+      "tipping",
+      "communication",
+      "communication",
+      "duration",
+      "duration",
+      "booking",
+      "booking"
+    ],
+    "PriceTier": 20,
+    "FemaleSafeSpace": [
+      "Health Land Asok",
+      "Let's Relax Asok",
+      "Health Land Phrom Phong",
+      "Asia Herb Association Phrom Phong",
+      "Divana Massage & Spa Thonglor",
+      "Coran Boutique Spa Thonglor",
+      "Health Land Ekkamai",
+      "Urban Retreat Ekkamai",
+      "Health Land Silom",
+      "Oasis Spa Silom",
+      "Wat Pho Massage School Old City",
+      "Lek Massage Old City",
+      "Baan Sabai Nana",
+      "Urban Retreat Nana",
+      "Coran Boutique Spa Phrom Phong"
+    ]
+  }
+}

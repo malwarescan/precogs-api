@@ -1,0 +1,36 @@
+{
+  "name": "invoke_precog",
+  "description": "Calls the Precogs API to retrieve verified massage safety, pricing, and legitimacy data for Bangkok districts. Use precog='bkk_massage' for Bangkok massage queries.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "precog": {
+        "type": "string",
+        "description": "Precog type to invoke. Use 'bkk_massage' for Bangkok massage queries.",
+        "enum": ["schema", "faq", "pricing", "home", "home.hvac", "home.plumbing", "home.electrical", "home.safety", "home.safety.mold", "home.flood", "bkk_massage"]
+      },
+      "content_source": {
+        "type": "string",
+        "enum": ["inline", "url"],
+        "default": "inline",
+        "description": "Always use 'inline' for chat queries"
+      },
+      "content": {
+        "type": "string",
+        "description": "The user's original natural-language request about Bangkok massage (e.g., 'Find a safe massage in Asok', 'What are the prices in Nana?')"
+      },
+      "task": {
+        "type": "string",
+        "description": "The analysis type to perform. Valid options: district_aware_ranking (default), legitimacy_scoring, safety_pattern_recognition, price_sanity_checking.",
+        "enum": ["district_aware_ranking", "legitimacy_scoring", "safety_pattern_recognition", "price_sanity_checking"]
+      },
+      "region": {
+        "type": "string",
+        "description": "Bangkok district (e.g., Asok, Nana, Phrom Phong, Thonglor, Ekkamai, Silom, Ari, Victory Monument, Ratchada, Old City). Extract from user query if mentioned.",
+        "enum": ["Asok", "Nana", "Phrom Phong", "Thonglor", "Ekkamai", "Silom", "Ari", "Victory Monument", "Ratchada", "Old City"]
+      }
+    },
+    "required": ["precog", "content"]
+  }
+}
+

@@ -1,0 +1,134 @@
+{
+  "corpus_id": "bkk_massage",
+  "corpus_name": "Bangkok Massage Intelligence",
+  "corpus_path": "/corpora/thailand/bangkok/massage/",
+  "version": "1.0.0",
+  "created_at": "2025-01-05T00:00:00Z",
+  "precog_binding": "bkk_massage",
+  "description": "Structured, verifiable, safety-prioritized dataset covering massage shops, districts, pricing, etiquette, and risk signals across Bangkok",
+  "primary_entity": "MassageShop",
+  "files": [
+    {
+      "filename": "shops_legit.ndjson",
+      "entity_type": "MassageShop",
+      "description": "Legitimate massage shops with verified safety and service quality",
+      "required": true
+    },
+    {
+      "filename": "shops_risky.ndjson",
+      "entity_type": "MassageShop",
+      "description": "Shops with known risk factors or unverifiable legitimacy",
+      "required": true
+    },
+    {
+      "filename": "pricing_tiers.ndjson",
+      "entity_type": "PriceTier",
+      "description": "Price bands by district and type of massage",
+      "required": true
+    },
+    {
+      "filename": "neighborhood_profiles.ndjson",
+      "entity_type": "District",
+      "description": "District-level definitions with character, safety, pricing, and risk level",
+      "required": true
+    },
+    {
+      "filename": "etiquette.ndjson",
+      "entity_type": "EtiquetteRule",
+      "description": "Thai massage etiquette including clothing, tipping, communication, and duration norms",
+      "required": true
+    },
+    {
+      "filename": "scam_patterns.ndjson",
+      "entity_type": "ScamPattern",
+      "description": "Common patterns to filter out unsafe options",
+      "required": true
+    },
+    {
+      "filename": "safety_signals.ndjson",
+      "entity_type": "SafetySignal",
+      "description": "Positive safety indicators for shops",
+      "required": true
+    },
+    {
+      "filename": "female_safe_spaces.ndjson",
+      "entity_type": "MassageShop",
+      "description": "Shops known for consistent, verifiable safety for solo women",
+      "required": true
+    },
+    {
+      "filename": "triples.ndjson",
+      "entity_type": "Triple",
+      "description": "Generated triples linking entities (Shop→District, Shop→Safety Signals, etc.)",
+      "required": false,
+      "generated": true
+    }
+  ],
+  "schema_rules": {
+    "MassageShop": {
+      "required_fields": ["@type", "name"],
+      "optional_fields": ["district", "address", "coordinates", "price_traditional", "price_oil", "hours", "franchise", "legit", "strengths", "risk_factors", "notes", "last_verified"],
+      "allowed_districts": ["Asok", "Nana", "Phrom Phong", "Thonglor", "Ekkamai", "Silom", "Ari", "Victory Monument", "Ratchada", "Old City"]
+    },
+    "District": {
+      "required_fields": ["@type", "name"],
+      "optional_fields": ["character", "safety_at_night", "price_average_traditional", "price_average_oil", "tourist_density", "risk_level", "notes"]
+    },
+    "PriceTier": {
+      "required_fields": ["@type", "district", "massage_type"],
+      "optional_fields": ["price_low", "price_high", "price_typical", "currency", "notes"]
+    },
+    "SafetySignal": {
+      "required_fields": ["@type", "name"],
+      "optional_fields": ["description", "reliability", "notes"]
+    },
+    "ScamPattern": {
+      "required_fields": ["@type", "name"],
+      "optional_fields": ["description", "risk_level", "common_locations", "notes"]
+    },
+    "EtiquetteRule": {
+      "required_fields": ["@type", "category"],
+      "optional_fields": ["rule", "notes"]
+    }
+  },
+  "triple_rules": {
+    "Shop → District": {
+      "predicate": "located_in",
+      "subject_type": "MassageShop",
+      "object_type": "District"
+    },
+    "Shop → Safety Signals": {
+      "predicate": "has_safety_signal",
+      "subject_type": "MassageShop",
+      "object_type": "SafetySignal"
+    },
+    "Shop → Risk Factors": {
+      "predicate": "has_risk_factor",
+      "subject_type": "MassageShop",
+      "object_type": "ScamPattern"
+    },
+    "District → Price Tier": {
+      "predicate": "has_price_band",
+      "subject_type": "District",
+      "object_type": "PriceTier"
+    },
+    "Shop → Female Safe": {
+      "predicate": "is_verified_safe_for",
+      "subject_type": "MassageShop",
+      "object_type": "solo_female_travelers"
+    }
+  },
+  "precog_tasks": [
+    "legitimacy_scoring",
+    "district_aware_ranking",
+    "safety_pattern_recognition",
+    "price_sanity_checking"
+  ],
+  "data_quality_requirements": {
+    "no_ambiguous_shops": "Shops with unsure legitimacy should have legit: null",
+    "conservative_safety": "Err on side of caution - unverified shops go to unknown, not safe",
+    "normalized_districts": "Districts must match allowed list exactly",
+    "no_duplicates": "Use source_hash or internal hashing to dedupe shop entries"
+  }
+}
+

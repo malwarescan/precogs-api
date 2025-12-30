@@ -1,0 +1,199 @@
+{"@type":"Triple","subject":"Health Land Asok","predicate":"located_in","object":"Asok"}
+{"@type":"Triple","subject":"Let's Relax Asok","predicate":"located_in","object":"Asok"}
+{"@type":"Triple","subject":"Health Land Phrom Phong","predicate":"located_in","object":"Phrom Phong"}
+{"@type":"Triple","subject":"Asia Herb Association Phrom Phong","predicate":"located_in","object":"Phrom Phong"}
+{"@type":"Triple","subject":"Divana Massage & Spa Thonglor","predicate":"located_in","object":"Thonglor"}
+{"@type":"Triple","subject":"Coran Boutique Spa Thonglor","predicate":"located_in","object":"Thonglor"}
+{"@type":"Triple","subject":"Health Land Ekkamai","predicate":"located_in","object":"Ekkamai"}
+{"@type":"Triple","subject":"Urban Retreat Ekkamai","predicate":"located_in","object":"Ekkamai"}
+{"@type":"Triple","subject":"Health Land Silom","predicate":"located_in","object":"Silom"}
+{"@type":"Triple","subject":"Oasis Spa Silom","predicate":"located_in","object":"Silom"}
+{"@type":"Triple","subject":"Ari Massage Studio","predicate":"located_in","object":"Ari"}
+{"@type":"Triple","subject":"Baan Sabai Ari","predicate":"located_in","object":"Ari"}
+{"@type":"Triple","subject":"Health Land Victory Monument","predicate":"located_in","object":"Victory Monument"}
+{"@type":"Triple","subject":"Ratchada Traditional Massage","predicate":"located_in","object":"Ratchada"}
+{"@type":"Triple","subject":"Wat Pho Massage School Old City","predicate":"located_in","object":"Old City"}
+{"@type":"Triple","subject":"Lek Massage Old City","predicate":"located_in","object":"Old City"}
+{"@type":"Triple","subject":"Nana Traditional Massage","predicate":"located_in","object":"Nana"}
+{"@type":"Triple","subject":"Baan Sabai Nana","predicate":"located_in","object":"Nana"}
+{"@type":"Triple","subject":"Urban Retreat Nana","predicate":"located_in","object":"Nana"}
+{"@type":"Triple","subject":"Coran Boutique Spa Phrom Phong","predicate":"located_in","object":"Phrom Phong"}
+{"@type":"Triple","subject":"Unknown Shop Nana Soi 4","predicate":"located_in","object":"Nana"}
+{"@type":"Triple","subject":"Unverified Shop Silom Alley","predicate":"located_in","object":"Silom"}
+{"@type":"Triple","subject":"Suspicious Shop Nana Soi 7","predicate":"located_in","object":"Nana"}
+{"@type":"Triple","subject":"Unverified Shop Old City Backstreet","predicate":"located_in","object":"Old City"}
+{"@type":"Triple","subject":"Risky Shop Victory Monument","predicate":"located_in","object":"Victory Monument"}
+{"@type":"Triple","subject":"Unverified Shop Ratchada","predicate":"located_in","object":"Ratchada"}
+{"@type":"Triple","subject":"Suspicious Shop Nana Soi 3","predicate":"located_in","object":"Nana"}
+{"@type":"Triple","subject":"Unverified Shop Silom Soi 4","predicate":"located_in","object":"Silom"}
+{"@type":"Triple","subject":"Risky Shop Old City Market","predicate":"located_in","object":"Old City"}
+{"@type":"Triple","subject":"Unverified Shop Nana Soi 6","predicate":"located_in","object":"Nana"}
+{"@type":"Triple","subject":"Suspicious Shop Victory Monument Alley","predicate":"located_in","object":"Victory Monument"}
+{"@type":"Triple","subject":"Unverified Shop Ratchada Night Market","predicate":"located_in","object":"Ratchada"}
+{"@type":"Triple","subject":"Health Land Asok","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Health Land Asok","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Health Land Asok","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Health Land Asok","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Health Land Asok","predicate":"has_safety_signal","object":"professional_branding"}
+{"@type":"Triple","subject":"Health Land Asok","predicate":"has_safety_signal","object":"franchise_chains"}
+{"@type":"Triple","subject":"Let's Relax Asok","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Let's Relax Asok","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Let's Relax Asok","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Let's Relax Asok","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Let's Relax Asok","predicate":"has_safety_signal","object":"professional_branding"}
+{"@type":"Triple","subject":"Let's Relax Asok","predicate":"has_safety_signal","object":"franchise_chains"}
+{"@type":"Triple","subject":"Health Land Phrom Phong","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Health Land Phrom Phong","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Health Land Phrom Phong","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Health Land Phrom Phong","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Health Land Phrom Phong","predicate":"has_safety_signal","object":"professional_branding"}
+{"@type":"Triple","subject":"Health Land Phrom Phong","predicate":"has_safety_signal","object":"franchise_chains"}
+{"@type":"Triple","subject":"Asia Herb Association Phrom Phong","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Asia Herb Association Phrom Phong","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Asia Herb Association Phrom Phong","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Asia Herb Association Phrom Phong","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Asia Herb Association Phrom Phong","predicate":"has_safety_signal","object":"professional_branding"}
+{"@type":"Triple","subject":"Divana Massage & Spa Thonglor","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Divana Massage & Spa Thonglor","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Divana Massage & Spa Thonglor","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Divana Massage & Spa Thonglor","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Divana Massage & Spa Thonglor","predicate":"has_safety_signal","object":"professional_branding"}
+{"@type":"Triple","subject":"Coran Boutique Spa Thonglor","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Coran Boutique Spa Thonglor","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Coran Boutique Spa Thonglor","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Coran Boutique Spa Thonglor","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Coran Boutique Spa Thonglor","predicate":"has_safety_signal","object":"professional_branding"}
+{"@type":"Triple","subject":"Health Land Ekkamai","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Health Land Ekkamai","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Health Land Ekkamai","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Health Land Ekkamai","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Health Land Ekkamai","predicate":"has_safety_signal","object":"professional_branding"}
+{"@type":"Triple","subject":"Health Land Ekkamai","predicate":"has_safety_signal","object":"franchise_chains"}
+{"@type":"Triple","subject":"Urban Retreat Ekkamai","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Urban Retreat Ekkamai","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Urban Retreat Ekkamai","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Urban Retreat Ekkamai","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Urban Retreat Ekkamai","predicate":"has_safety_signal","object":"professional_branding"}
+{"@type":"Triple","subject":"Health Land Silom","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Health Land Silom","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Health Land Silom","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Health Land Silom","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Health Land Silom","predicate":"has_safety_signal","object":"professional_branding"}
+{"@type":"Triple","subject":"Health Land Silom","predicate":"has_safety_signal","object":"franchise_chains"}
+{"@type":"Triple","subject":"Oasis Spa Silom","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Oasis Spa Silom","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Oasis Spa Silom","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Oasis Spa Silom","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Oasis Spa Silom","predicate":"has_safety_signal","object":"professional_branding"}
+{"@type":"Triple","subject":"Ari Massage Studio","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Ari Massage Studio","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Ari Massage Studio","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Ari Massage Studio","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Baan Sabai Ari","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Baan Sabai Ari","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Baan Sabai Ari","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Baan Sabai Ari","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Health Land Victory Monument","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Health Land Victory Monument","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Health Land Victory Monument","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Health Land Victory Monument","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Health Land Victory Monument","predicate":"has_safety_signal","object":"professional_branding"}
+{"@type":"Triple","subject":"Health Land Victory Monument","predicate":"has_safety_signal","object":"franchise_chains"}
+{"@type":"Triple","subject":"Ratchada Traditional Massage","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Ratchada Traditional Massage","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Ratchada Traditional Massage","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Ratchada Traditional Massage","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Wat Pho Massage School Old City","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Wat Pho Massage School Old City","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Wat Pho Massage School Old City","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Wat Pho Massage School Old City","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Wat Pho Massage School Old City","predicate":"has_safety_signal","object":"professional_branding"}
+{"@type":"Triple","subject":"Wat Pho Massage School Old City","predicate":"has_safety_signal","object":"licensed_display"}
+{"@type":"Triple","subject":"Lek Massage Old City","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Lek Massage Old City","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Lek Massage Old City","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Lek Massage Old City","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Nana Traditional Massage","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Nana Traditional Massage","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Nana Traditional Massage","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Nana Traditional Massage","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Baan Sabai Nana","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Baan Sabai Nana","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Baan Sabai Nana","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Baan Sabai Nana","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Urban Retreat Nana","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Urban Retreat Nana","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Urban Retreat Nana","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Urban Retreat Nana","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Urban Retreat Nana","predicate":"has_safety_signal","object":"professional_branding"}
+{"@type":"Triple","subject":"Coran Boutique Spa Phrom Phong","predicate":"has_safety_signal","object":"uniforms"}
+{"@type":"Triple","subject":"Coran Boutique Spa Phrom Phong","predicate":"has_safety_signal","object":"open_storefront"}
+{"@type":"Triple","subject":"Coran Boutique Spa Phrom Phong","predicate":"has_safety_signal","object":"posted_menu"}
+{"@type":"Triple","subject":"Coran Boutique Spa Phrom Phong","predicate":"has_safety_signal","object":"visible_reception"}
+{"@type":"Triple","subject":"Coran Boutique Spa Phrom Phong","predicate":"has_safety_signal","object":"professional_branding"}
+{"@type":"Triple","subject":"Unknown Shop Nana Soi 4","predicate":"has_risk_factor","object":"unlisted_pricing"}
+{"@type":"Triple","subject":"Unknown Shop Nana Soi 4","predicate":"has_risk_factor","object":"dark_entry"}
+{"@type":"Triple","subject":"Unknown Shop Nana Soi 4","predicate":"has_risk_factor","object":"unsolicited_offers"}
+{"@type":"Triple","subject":"Unverified Shop Silom Alley","predicate":"has_risk_factor","object":"unlisted_pricing"}
+{"@type":"Triple","subject":"Unverified Shop Silom Alley","predicate":"has_risk_factor","object":"dark_entry"}
+{"@type":"Triple","subject":"Unverified Shop Silom Alley","predicate":"has_risk_factor","object":"no_reception"}
+{"@type":"Triple","subject":"Suspicious Shop Nana Soi 7","predicate":"has_risk_factor","object":"bait_and_switch"}
+{"@type":"Triple","subject":"Suspicious Shop Nana Soi 7","predicate":"has_risk_factor","object":"extra_fee_pressure"}
+{"@type":"Triple","subject":"Suspicious Shop Nana Soi 7","predicate":"has_risk_factor","object":"hidden_surcharges"}
+{"@type":"Triple","subject":"Unverified Shop Old City Backstreet","predicate":"has_risk_factor","object":"dark_entry"}
+{"@type":"Triple","subject":"Unverified Shop Old City Backstreet","predicate":"has_risk_factor","object":"unlisted_pricing"}
+{"@type":"Triple","subject":"Unverified Shop Old City Backstreet","predicate":"has_risk_factor","object":"no_reception"}
+{"@type":"Triple","subject":"Risky Shop Victory Monument","predicate":"has_risk_factor","object":"menu_upselling"}
+{"@type":"Triple","subject":"Risky Shop Victory Monument","predicate":"has_risk_factor","object":"extra_fee_pressure"}
+{"@type":"Triple","subject":"Unverified Shop Ratchada","predicate":"has_risk_factor","object":"unlisted_pricing"}
+{"@type":"Triple","subject":"Unverified Shop Ratchada","predicate":"has_risk_factor","object":"no_reception"}
+{"@type":"Triple","subject":"Suspicious Shop Nana Soi 3","predicate":"has_risk_factor","object":"unsolicited_offers"}
+{"@type":"Triple","subject":"Suspicious Shop Nana Soi 3","predicate":"has_risk_factor","object":"bait_and_switch"}
+{"@type":"Triple","subject":"Suspicious Shop Nana Soi 3","predicate":"has_risk_factor","object":"hidden_surcharges"}
+{"@type":"Triple","subject":"Unverified Shop Silom Soi 4","predicate":"has_risk_factor","object":"dark_entry"}
+{"@type":"Triple","subject":"Unverified Shop Silom Soi 4","predicate":"has_risk_factor","object":"unlisted_pricing"}
+{"@type":"Triple","subject":"Risky Shop Old City Market","predicate":"has_risk_factor","object":"extra_fee_pressure"}
+{"@type":"Triple","subject":"Risky Shop Old City Market","predicate":"has_risk_factor","object":"menu_upselling"}
+{"@type":"Triple","subject":"Unverified Shop Nana Soi 6","predicate":"has_risk_factor","object":"unsolicited_offers"}
+{"@type":"Triple","subject":"Unverified Shop Nana Soi 6","predicate":"has_risk_factor","object":"dark_entry"}
+{"@type":"Triple","subject":"Unverified Shop Nana Soi 6","predicate":"has_risk_factor","object":"no_reception"}
+{"@type":"Triple","subject":"Suspicious Shop Victory Monument Alley","predicate":"has_risk_factor","object":"dark_entry"}
+{"@type":"Triple","subject":"Suspicious Shop Victory Monument Alley","predicate":"has_risk_factor","object":"unlisted_pricing"}
+{"@type":"Triple","subject":"Suspicious Shop Victory Monument Alley","predicate":"has_risk_factor","object":"no_reception"}
+{"@type":"Triple","subject":"Unverified Shop Ratchada Night Market","predicate":"has_risk_factor","object":"unlisted_pricing"}
+{"@type":"Triple","subject":"Unverified Shop Ratchada Night Market","predicate":"has_risk_factor","object":"extra_fee_pressure"}
+{"@type":"Triple","subject":"Asok","predicate":"has_price_band","object":"{\"massage_type\":\"traditional\",\"price_low\":400,\"price_high\":500,\"price_typical\":450,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Asok","predicate":"has_price_band","object":"{\"massage_type\":\"oil\",\"price_low\":650,\"price_high\":800,\"price_typical\":700,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Nana","predicate":"has_price_band","object":"{\"massage_type\":\"traditional\",\"price_low\":300,\"price_high\":450,\"price_typical\":350,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Nana","predicate":"has_price_band","object":"{\"massage_type\":\"oil\",\"price_low\":500,\"price_high\":700,\"price_typical\":550,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Phrom Phong","predicate":"has_price_band","object":"{\"massage_type\":\"traditional\",\"price_low\":450,\"price_high\":600,\"price_typical\":500,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Phrom Phong","predicate":"has_price_band","object":"{\"massage_type\":\"oil\",\"price_low\":700,\"price_high\":900,\"price_typical\":750,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Thonglor","predicate":"has_price_band","object":"{\"massage_type\":\"traditional\",\"price_low\":500,\"price_high\":650,\"price_typical\":550,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Thonglor","predicate":"has_price_band","object":"{\"massage_type\":\"oil\",\"price_low\":750,\"price_high\":950,\"price_typical\":800,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Ekkamai","predicate":"has_price_band","object":"{\"massage_type\":\"traditional\",\"price_low\":350,\"price_high\":500,\"price_typical\":400,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Ekkamai","predicate":"has_price_band","object":"{\"massage_type\":\"oil\",\"price_low\":550,\"price_high\":750,\"price_typical\":650,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Silom","predicate":"has_price_band","object":"{\"massage_type\":\"traditional\",\"price_low\":350,\"price_high\":500,\"price_typical\":400,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Silom","predicate":"has_price_band","object":"{\"massage_type\":\"oil\",\"price_low\":550,\"price_high\":750,\"price_typical\":650,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Ari","predicate":"has_price_band","object":"{\"massage_type\":\"traditional\",\"price_low\":300,\"price_high\":400,\"price_typical\":350,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Ari","predicate":"has_price_band","object":"{\"massage_type\":\"oil\",\"price_low\":450,\"price_high\":650,\"price_typical\":550,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Victory Monument","predicate":"has_price_band","object":"{\"massage_type\":\"traditional\",\"price_low\":250,\"price_high\":350,\"price_typical\":300,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Victory Monument","predicate":"has_price_band","object":"{\"massage_type\":\"oil\",\"price_low\":400,\"price_high\":600,\"price_typical\":500,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Ratchada","predicate":"has_price_band","object":"{\"massage_type\":\"traditional\",\"price_low\":300,\"price_high\":450,\"price_typical\":350,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Ratchada","predicate":"has_price_band","object":"{\"massage_type\":\"oil\",\"price_low\":500,\"price_high\":700,\"price_typical\":600,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Old City","predicate":"has_price_band","object":"{\"massage_type\":\"traditional\",\"price_low\":350,\"price_high\":500,\"price_typical\":400,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Old City","predicate":"has_price_band","object":"{\"massage_type\":\"oil\",\"price_low\":550,\"price_high\":750,\"price_typical\":650,\"currency\":\"THB\"}"}
+{"@type":"Triple","subject":"Health Land Asok","predicate":"is_verified_safe_for","object":"solo_female_travelers"}
+{"@type":"Triple","subject":"Let's Relax Asok","predicate":"is_verified_safe_for","object":"solo_female_travelers"}
+{"@type":"Triple","subject":"Health Land Phrom Phong","predicate":"is_verified_safe_for","object":"solo_female_travelers"}
+{"@type":"Triple","subject":"Asia Herb Association Phrom Phong","predicate":"is_verified_safe_for","object":"solo_female_travelers"}
+{"@type":"Triple","subject":"Divana Massage & Spa Thonglor","predicate":"is_verified_safe_for","object":"solo_female_travelers"}
+{"@type":"Triple","subject":"Coran Boutique Spa Thonglor","predicate":"is_verified_safe_for","object":"solo_female_travelers"}
+{"@type":"Triple","subject":"Health Land Ekkamai","predicate":"is_verified_safe_for","object":"solo_female_travelers"}
+{"@type":"Triple","subject":"Urban Retreat Ekkamai","predicate":"is_verified_safe_for","object":"solo_female_travelers"}
+{"@type":"Triple","subject":"Health Land Silom","predicate":"is_verified_safe_for","object":"solo_female_travelers"}
+{"@type":"Triple","subject":"Oasis Spa Silom","predicate":"is_verified_safe_for","object":"solo_female_travelers"}
+{"@type":"Triple","subject":"Wat Pho Massage School Old City","predicate":"is_verified_safe_for","object":"solo_female_travelers"}
+{"@type":"Triple","subject":"Lek Massage Old City","predicate":"is_verified_safe_for","object":"solo_female_travelers"}
+{"@type":"Triple","subject":"Baan Sabai Nana","predicate":"is_verified_safe_for","object":"solo_female_travelers"}
+{"@type":"Triple","subject":"Urban Retreat Nana","predicate":"is_verified_safe_for","object":"solo_female_travelers"}
+{"@type":"Triple","subject":"Coran Boutique Spa Phrom Phong","predicate":"is_verified_safe_for","object":"solo_female_travelers"}

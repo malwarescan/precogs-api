@@ -1,0 +1,12 @@
+{
+  "generated_at": "2025-11-16T17:57:55.135Z",
+  "schema_compliance": "pass",
+  "data_quality": "good",
+  "errors": [],
+  "warnings": [],
+  "file_stats": {
+    "shops_legit.ndjson": 20,
+    "shops_risky.ndjson": 12,
+    "neighborhood_profiles.ndjson": 10
+  }
+}

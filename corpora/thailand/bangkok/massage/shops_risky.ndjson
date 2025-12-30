@@ -1,0 +1,13 @@
+{"@type":"MassageShop","name":"Unknown Shop Nana Soi 4","district":"Nana","risk_factors":["unlisted_pricing","dark_entry","unsolicited_offers"],"legit":false,"notes":"Shop in back alley, no posted prices, aggressive touts. Avoid."}
+{"@type":"MassageShop","name":"Unverified Shop Silom Alley","district":"Silom","risk_factors":["unlisted_pricing","dark_entry","no_reception"],"legit":false,"notes":"Hidden entrance, no visible reception. High risk."}
+{"@type":"MassageShop","name":"Suspicious Shop Nana Soi 7","district":"Nana","risk_factors":["bait_and_switch","extra_fee_pressure","hidden_surcharges"],"legit":false,"notes":"Reports of price baiting and unexpected charges."}
+{"@type":"MassageShop","name":"Unverified Shop Old City Backstreet","district":"Old City","risk_factors":["dark_entry","unlisted_pricing","no_reception"],"legit":false,"notes":"Backstreet location, no clear signage or pricing."}
+{"@type":"MassageShop","name":"Risky Shop Victory Monument","district":"Victory Monument","risk_factors":["menu_upselling","extra_fee_pressure"],"legit":false,"notes":"Aggressive upselling reported by multiple sources."}
+{"@type":"MassageShop","name":"Unverified Shop Ratchada","district":"Ratchada","risk_factors":["unlisted_pricing","no_reception"],"legit":false,"notes":"New area, shop cannot be verified. Exercise caution."}
+{"@type":"MassageShop","name":"Suspicious Shop Nana Soi 3","district":"Nana","risk_factors":["unsolicited_offers","bait_and_switch","hidden_surcharges"],"legit":false,"notes":"Street touts, multiple reports of price manipulation."}
+{"@type":"MassageShop","name":"Unverified Shop Silom Soi 4","district":"Silom","risk_factors":["dark_entry","unlisted_pricing"],"legit":false,"notes":"Poorly lit entrance, no price transparency."}
+{"@type":"MassageShop","name":"Risky Shop Old City Market","district":"Old City","risk_factors":["extra_fee_pressure","menu_upselling"],"legit":false,"notes":"Tourist-targeted upselling tactics reported."}
+{"@type":"MassageShop","name":"Unverified Shop Nana Soi 6","district":"Nana","risk_factors":["unsolicited_offers","dark_entry","no_reception"],"legit":false,"notes":"Multiple risk factors present. Avoid."}
+{"@type":"MassageShop","name":"Suspicious Shop Victory Monument Alley","district":"Victory Monument","risk_factors":["dark_entry","unlisted_pricing","no_reception"],"legit":false,"notes":"Alley location with no clear business presence."}
+{"@type":"MassageShop","name":"Unverified Shop Ratchada Night Market","district":"Ratchada","risk_factors":["unlisted_pricing","extra_fee_pressure"],"legit":false,"notes":"Cannot verify legitimacy. Use caution."}
+

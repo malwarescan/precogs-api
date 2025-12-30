@@ -1,0 +1,9 @@
+{"@type":"ScamPattern","name":"bait_and_switch","description":"Advertised low price, then pressure for expensive extras","risk_level":"high","common_locations":["Nana","Silom","Old City"],"notes":"Always confirm final price before service"}
+{"@type":"ScamPattern","name":"extra_fee_pressure","description":"Upselling pressure for 'premium' services or 'special' treatments","risk_level":"high","common_locations":["Nana","Victory Monument"],"notes":"Legitimate shops don't pressure for extras"}
+{"@type":"ScamPattern","name":"menu_upselling","description":"Hidden menu items with much higher prices","risk_level":"medium","common_locations":["Nana","Silom"],"notes":"Ask to see full menu before booking"}
+{"@type":"ScamPattern","name":"hidden_surcharges","description":"Unexpected charges added at payment time","risk_level":"high","common_locations":["Nana","Old City"],"notes":"Confirm all fees before service starts"}
+{"@type":"ScamPattern","name":"unlisted_pricing","description":"No prices displayed, quoted verbally only","risk_level":"high","common_locations":["Nana","Silom","Ratchada"],"notes":"Avoid shops without posted prices"}
+{"@type":"ScamPattern","name":"dark_entry","description":"Entrance in alley, back street, or poorly lit area","risk_level":"high","common_locations":["Nana","Silom"],"notes":"Legitimate shops have street-facing entrances"}
+{"@type":"ScamPattern","name":"unsolicited_offers","description":"Aggressive street touts or unsolicited offers","risk_level":"high","common_locations":["Nana","Old City"],"notes":"Avoid shops that use street touts"}
+{"@type":"ScamPattern","name":"no_reception","description":"No visible reception area or front desk","risk_level":"medium","common_locations":["Nana","Ratchada"],"notes":"Professional shops have reception"}
+

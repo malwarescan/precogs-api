@@ -1,0 +1,27 @@
+{
+    "name": "@casa/environmental-ingestion",
+    "version": "1.0.0",
+    "description": "NOAA data acquisition and normalization pipeline for environmental.local_climate domain",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "smoke-test": "node tests/smoke-test-zip-33907.js",
+        "validate-cwnf": "node tests/validate-cwnf.js"
+    },
+    "keywords": [
+        "noaa",
+        "climate",
+        "weather",
+        "croutons",
+        "casa",
+        "environmental"
+    ],
+    "author": "Croutons x Precogs Data Team",
+    "license": "UNLICENSED",
+    "private": true,
+    "dependencies": {},
+    "devDependencies": {},
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}

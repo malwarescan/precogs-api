@@ -1,0 +1,32 @@
+{
+  "name": "@croutons/cli",
+  "version": "1.0.1",
+  "description": "Bootstrap Croutons satellite integrations for web projects",
+  "type": "module",
+  "bin": {
+    "croutons-init": "./bin/croutons-init.js"
+  },
+  "files": [
+    "bin",
+    "templates",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "test": "node bin/croutons-init.js"
+  },
+  "keywords": [
+    "croutons",
+    "knowledge-graph",
+    "satellite",
+    "sdk"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "inquirer": "^9.2.15"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

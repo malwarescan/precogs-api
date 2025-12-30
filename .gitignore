@@ -1,3 +1,11 @@
 node_modules
 .env
 
+
+*.zip
+*.psd
+croutons copy.ai/
+.DS_Store
+croutons system of truth.txt
+*.rtf
+*.png

@@ -1,0 +1,843 @@
+/**
+ * Environmental Home Risk Oracle
+ * 
+ * CASA-compliant oracle for conversational homeowner Q&A about environmental risks.
+ * 
+ * Voice: "Informed Neighbor" - conversational, local, specific, action-oriented
+ * Format: Question → Structured assessment with risk scores, causes, and steps
+ * 
+ * @module environmental_home_risk
+ */
+
+const RiskFactorsEngine = require('../models/riskFactors');
+const MaintenanceTimingEngine = require('../models/maintenanceTiming');
+
+class EnvironmentalHomeRiskOracle {
+    constructor(graphClient) {
+        this.graphClient = graphClient;
+        // Session context for domain continuity
+        this.sessions = new Map();
+    }
+
+    /**
+     * Process homeowner question and return CASA-formatted response
+     * 
+     * CASA Contract:
+     * Input: { question, zip, home_context?, session_id? }
+     * Output: { assessment, risk_score, causes, steps, follow_up, session_id }
+     * 
+     * @param {Object} request - CASA request
+     * @param {string} request.question - Homeowner's question
+     * @param {string} request.zip - ZIP code (required)
+     * @param {Object} request.home_context - Optional home details
+     * @param {string} request.session_id - Optional session ID for continuity
+     * @returns {Promise<Object>} CASA-formatted response
+     */
+    async ask(request) {
+        const { question, zip, home_context = {}, session_id } = request;
+
+        // Get or create session context
+        const sessionId = session_id || this._generateSessionId();
+        const sessionContext = this._getSessionContext(sessionId);
+
+        // Validate required fields
+        if (!question || !question.trim()) {
+            return this._errorResponse('question_unclear', 'Please ask a specific question about your home.');
+        }
+
+        if (!zip || !/^\d{5}(-\d{4})?$/.test(zip)) {
+            return this._errorResponse('location_invalid', 'Please provide a valid ZIP code.');
+        }
+
+        try {
+            // 1. Fetch climate data for location
+            const climateData = await this._fetchClimateData(zip);
+
+            if (climateData.length === 0) {
+                return this._errorResponse(
+                    'insufficient_data',
+                    `We don't have enough climate data for ${zip} yet. We're working on expanding coverage.`
+                );
+            }
+
+            // 2. Classify question intent
+            const intent = this._classifyQuestion(question);
+
+            // 3. Calculate relevant metrics
+            const risks = RiskFactorsEngine.calculateRisks(climateData, {
+                siding_material: home_context.siding_material || 'vinyl',
+                roof_age: home_context.roof_age || 10,
+                structure_type: home_context.structure_type || 'single_family'
+            });
+
+            const maintenance = MaintenanceTimingEngine.calculateMaintenanceWindows(
+                climateData,
+                [],
+                new Date().toISOString().split('T')[0]
+            );
+
+            // 4. Generate CASA-formatted response
+            return this._generateResponse(intent, risks, maintenance, climateData, zip, home_context);
+
+        } catch (error) {
+            console.error('[oracle] Error processing request:', error);
+            return this._errorResponse('internal_error', 'Something went wrong. Please try again.');
+        }
+    }
+
+    /**
+     * Classify question intent
+     * 
+     * @private
+     * @param {string} question - User's question
+     * @returns {Object} Intent classification
+     */
+    _classifyQuestion(question) {
+        const q = question.toLowerCase();
+
+        // Mold-related
+        if (q.match(/mold|mildew|moisture|damp|humid/)) {
+            return { type: 'mold_risk', keywords: ['mold', 'humidity', 'moisture'] };
+        }
+
+        // Painting
+        if (q.match(/paint|repaint|exterior paint/)) {
+            return { type: 'painting_timing', keywords: ['paint', 'timing'] };
+        }
+
+        // Roof
+        if (q.match(/roof|shingle|leak|rot/)) {
+            return { type: 'roof_risk', keywords: ['roof', 'damage'] };
+        }
+
+        // Siding
+        if (q.match(/siding|warp|expand|buckle/)) {
+            return { type: 'siding_risk', keywords: ['siding', 'expansion'] };
+        }
+
+        // HVAC
+        if (q.match(/hvac|air condition|ac|heat|cool/)) {
+            return { type: 'hvac_maintenance', keywords: ['hvac', 'maintenance'] };
+        }
+
+        // Flood
+        if (q.match(/flood|water|drain|storm/)) {
+            return { type: 'flood_risk', keywords: ['flood', 'water'] };
+        }
+
+        // General maintenance
+        if (q.match(/maintain|service|when to|best time/)) {
+            return { type: 'general_maintenance', keywords: ['maintenance', 'timing'] };
+        }
+
+        // Default: general assessment
+        return { type: 'general_assessment', keywords: [] };
+    }
+
+    /**
+     * Generate CASA-formatted response
+     * 
+     * @private
+     * @param {Object} intent - Question intent
+     * @param {Object} risks - Risk scores
+     * @param {Object} maintenance - Maintenance windows
+     * @param {Array} climateData - Climate data
+     * @param {string} zip - ZIP code
+     * @param {Object} homeContext - Home context
+     * @returns {Object} CASA response
+     */
+    _generateResponse(intent, risks, maintenance, climateData, zip, homeContext) {
+        switch (intent.type) {
+            case 'mold_risk':
+                return this._moldRiskResponse(risks, climateData, zip);
+
+            case 'painting_timing':
+                return this._paintingTimingResponse(maintenance, climateData, zip);
+
+            case 'roof_risk':
+                return this._roofRiskResponse(risks, climateData, zip);
+
+            case 'siding_risk':
+                return this._sidingRiskResponse(risks, climateData, zip, homeContext);
+
+            case 'hvac_maintenance':
+                return this._hvacMaintenanceResponse(maintenance, risks, zip);
+
+            case 'flood_risk':
+                return this._floodRiskResponse(risks, climateData, zip);
+
+            case 'general_maintenance':
+                return this._generalMaintenanceResponse(maintenance, zip);
+
+            default:
+                return this._generalAssessmentResponse(risks, maintenance, climateData, zip);
+        }
+    }
+
+    /**
+     * Mold risk response (Informed Neighbor voice)
+     * 
+     * @private
+     */
+    _moldRiskResponse(risks, climateData, zip) {
+        const riskLevel = this._getRiskLevel(risks.mold_risk);
+        const dewPointAvg = this._average(climateData.map(d => d.dew_point).filter(Boolean));
+        const humidityAvg = this._average(climateData.map(d => d.humidity_index).filter(Boolean));
+
+        let assessment, causes, steps;
+
+        if (riskLevel === 'high') {
+            assessment = `Your area has higher-than-average mold risk. The climate in ${zip} creates conditions where mold can develop more easily, especially in poorly ventilated spaces.`;
+
+            causes = [
+                `Dew point averages ${dewPointAvg.toFixed(1)}°F—above the 70°F threshold where mold growth accelerates`,
+                `Humidity stays around ${humidityAvg.toFixed(0)}% on average, which is ideal for mold spores`,
+                `Your local climate keeps moisture levels elevated year-round`
+            ];
+
+            steps = [
+                {
+                    action: 'Run dehumidifiers in bathrooms, basements, and laundry areas',
+                    priority: 'high',
+                    why: 'Keeping indoor humidity below 60% prevents mold from taking hold'
+                },
+                {
+                    action: 'Improve ventilation—use exhaust fans when cooking or showering',
+                    priority: 'high',
+                    why: 'Moving air out prevents moisture buildup in high-use areas'
+                },
+                {
+                    action: 'Check windows and doors for air leaks',
+                    priority: 'medium',
+                    why: 'Sealing gaps keeps humid outdoor air from getting inside'
+                },
+                {
+                    action: 'Inspect attic and crawl spaces for moisture',
+                    priority: 'medium',
+                    why: 'Hidden moisture can lead to mold you won't see until it's a problem'
+        }
+            ];
+        } else if (riskLevel === 'moderate') {
+            assessment = `Your area has moderate mold risk. While ${zip} isn't the worst for mold, you'll want to stay on top of moisture control, especially during humid months.`;
+
+            causes = [
+                `Dew point averages ${dewPointAvg.toFixed(1)}°F—not extreme, but enough to watch`,
+                `Humidity levels around ${humidityAvg.toFixed(0)}% mean moisture can accumulate in poorly ventilated areas`,
+                `Seasonal humidity spikes create windows where mold can develop`
+            ];
+
+            steps = [
+                {
+                    action: 'Use bathroom and kitchen exhaust fans consistently',
+                    priority: 'medium',
+                    why: 'Prevents moisture from lingering after showers and cooking'
+                },
+                {
+                    action: 'Consider a dehumidifier for basements or enclosed spaces',
+                    priority: 'medium',
+                    why: 'Keeps humidity in check during peak months'
+                },
+                {
+                    action: 'Check for leaks around windows, pipes, and roof',
+                    priority: 'medium',
+                    why: 'Small leaks become mold problems fast in humid climates'
+                }
+            ];
+        } else {
+            assessment = `Good news—your area has relatively low mold risk. The climate in ${zip} doesn't create ideal conditions for mold, but basic moisture control is still smart.`;
+
+            causes = [
+                `Dew point averages ${dewPointAvg.toFixed(1)}°F—below the threshold for aggressive mold growth`,
+                `Humidity levels around ${humidityAvg.toFixed(0)}% are manageable`,
+                `Your local climate naturally keeps moisture in check`
+            ];
+
+            steps = [
+                {
+                    action: 'Use exhaust fans in bathrooms and kitchen',
+                    priority: 'low',
+                    why: 'Basic ventilation prevents any moisture issues'
+                },
+                {
+                    action: 'Fix leaks promptly if they occur',
+                    priority: 'medium',
+                    why: 'Even in dry climates, standing water can cause problems'
+                }
+            ];
+        }
+
+        return {
+            assessment,
+            risk_score: risks.mold_risk,
+            risk_level: riskLevel,
+            causes,
+            steps,
+            follow_up: [
+                'What can I do about basement humidity?',
+                'How do I know if I already have mold?',
+                'When should I run a dehumidifier?'
+            ],
+            data_summary: {
+                location: zip,
+                records_analyzed: climateData.length,
+                confidence: this._getConfidence(climateData.length)
+            }
+        };
+    }
+
+    /**
+     * Painting timing response
+     * 
+     * @private
+     */
+    _paintingTimingResponse(maintenance, climateData, zip) {
+        const painting = maintenance.painting;
+        const month = painting.recommended_month;
+        const week = painting.recommended_week;
+
+        const assessment = `The best time to paint your home in ${zip} is ${month}, specifically ${week}. That's when the weather gives you the ideal combo of temperature, humidity, and dry conditions.`;
+
+        const causes = [
+            `${month} temperatures average in the sweet spot (50-85°F) for paint to cure properly`,
+            `Humidity stays below 70%, so paint dries evenly without trapping moisture`,
+            `Rainfall is minimal during this window—less chance of rain ruining fresh paint`
+        ];
+
+        const steps = [
+            {
+                action: `Schedule painting for ${month}`,
+                priority: 'high',
+                why: 'Weather conditions are optimal for paint adhesion and curing'
+            },
+            {
+                action: 'Book your contractor now',
+                priority: 'high',
+                why: `${month} is prime painting season—contractors fill up fast`
+            },
+            {
+                action: 'Prep surfaces in advance',
+                priority: 'medium',
+                why: 'Clean, dry surfaces ensure paint lasts longer'
+            },
+            {
+                action: 'Watch the 10-day forecast before starting',
+                priority: 'medium',
+                why: 'Even in the best month, a surprise storm can happen'
+            }
+        ];
+
+        const alternatives = painting.alternative_months.length > 0
+            ? `If ${month} doesn't work, ${painting.alternative_months.join(' or ')} are solid backup options.`
+            : '';
+
+        return {
+            assessment: assessment + (alternatives ? ' ' + alternatives : ''),
+            risk_score: null,
+            risk_level: null,
+            causes,
+            steps,
+            follow_up: [
+                'What if I need to paint outside this window?',
+                'How long does exterior paint last here?',
+                'Should I pressure wash before painting?'
+            ],
+            data_summary: {
+                location: zip,
+                records_analyzed: climateData.length,
+                confidence: this._getConfidence(climateData.length)
+            }
+        };
+    }
+
+    /**
+     * Roof risk response
+     * 
+     * @private
+     */
+    _roofRiskResponse(risks, climateData, zip) {
+        const riskLevel = this._getRiskLevel(risks.roof_rot_risk);
+        const precipTotal = climateData.reduce((sum, d) => sum + (d.precipitation || 0), 0);
+        const rainyDays = climateData.filter(d => d.precipitation > 0.1).length;
+
+        let assessment, causes, steps;
+
+        if (riskLevel === 'high') {
+            assessment = `Your roof faces higher stress in ${zip} due to frequent rain and humidity. Roofs here tend to develop issues faster than in drier climates.`;
+
+            causes = [
+                `${precipTotal.toFixed(1)} inches of rain over ${rainyDays} days keeps roofs constantly wet`,
+                `High humidity means shingles don't fully dry between rain events`,
+                `Moisture gets trapped under shingles, leading to rot and deterioration`
+            ];
+
+            steps = [
+                {
+                    action: 'Inspect your roof twice a year—spring and fall',
+                    priority: 'high',
+                    why: 'Catching small issues early prevents expensive repairs'
+                },
+                {
+                    action: 'Clear gutters and check for standing water',
+                    priority: 'high',
+                    why: 'Clogged gutters cause water to back up under shingles'
+                },
+                {
+                    action: 'Look for missing or curling shingles',
+                    priority: 'medium',
+                    why: 'Damaged shingles let water into the roof deck'
+                },
+                {
+                    action: 'Check attic for water stains or mold',
+                    priority: 'medium',
+                    why: 'Interior damage means your roof is already leaking'
+                }
+            ];
+        } else {
+            assessment = `Your roof is in a relatively low-stress climate. ${zip} doesn't get extreme rainfall, so roofs here tend to last longer.`;
+
+            causes = [
+                `${precipTotal.toFixed(1)} inches of rain over ${rainyDays} days is manageable`,
+                `Lower humidity means roofs dry out between weather events`,
+                `Less moisture stress means slower deterioration`
+            ];
+
+            steps = [
+                {
+                    action: 'Inspect your roof annually',
+                    priority: 'medium',
+                    why: 'Even in good climates, roofs need occasional checks'
+                },
+                {
+                    action: 'Keep gutters clear',
+                    priority: 'medium',
+                    why: 'Prevents water backup during heavy rains'
+                }
+            ];
+        }
+
+        return {
+            assessment,
+            risk_score: risks.roof_rot_risk,
+            risk_level: riskLevel,
+            causes,
+            steps,
+            follow_up: [
+                'How long should my roof last here?',
+                'What are signs of roof damage?',
+                'When should I replace vs. repair?'
+            ],
+            data_summary: {
+                location: zip,
+                records_analyzed: climateData.length,
+                confidence: this._getConfidence(climateData.length)
+            }
+        };
+    }
+
+    /**
+     * Siding risk response
+     * 
+     * @private
+     */
+    _sidingRiskResponse(risks, climateData, zip, homeContext) {
+        const riskLevel = this._getRiskLevel(risks.siding_expansion_risk);
+        const material = homeContext.siding_material || 'vinyl';
+        const tempSwings = this._calculateTempSwings(climateData);
+
+        const assessment = `${material.charAt(0).toUpperCase() + material.slice(1)} siding in ${zip} experiences ${riskLevel} stress from temperature swings. Daily temperature changes cause expansion and contraction.`;
+
+        const causes = [
+            `Temperature swings average ${tempSwings.toFixed(1)}°F per day`,
+            `${material.charAt(0).toUpperCase() + material.slice(1)} expands and contracts with these changes`,
+            `Repeated cycles can cause warping, buckling, or gaps`
+        ];
+
+        const steps = [
+            {
+                action: 'Check for warped or buckled panels',
+                priority: 'medium',
+                why: 'Expansion stress shows up as visible warping'
+            },
+            {
+                action: 'Look for gaps between siding panels',
+                priority: 'medium',
+                why: 'Gaps let moisture and pests in'
+            },
+            {
+                action: 'Ensure proper installation spacing',
+                priority: 'low',
+                why: 'Siding needs room to expand without buckling'
+            }
+        ];
+
+        return {
+            assessment,
+            risk_score: risks.siding_expansion_risk,
+            risk_level: riskLevel,
+            causes,
+            steps,
+            follow_up: [
+                'What siding material is best for my climate?',
+                'How do I fix warped siding?',
+                'Should I replace or repair?'
+            ],
+            data_summary: {
+                location: zip,
+                records_analyzed: climateData.length,
+                confidence: this._getConfidence(climateData.length)
+            }
+        };
+    }
+
+    /**
+     * HVAC maintenance response
+     * 
+     * @private
+     */
+    _hvacMaintenanceResponse(maintenance, risks, zip) {
+        const hvac = maintenance.hvac_service;
+        const load = risks.hvac_seasonal_load;
+
+        const assessment = `Your HVAC system in ${zip} runs under ${load} seasonal load. You should service it twice a year—once before cooling season, once before heating season.`;
+
+        const causes = [
+            `${load.charAt(0).toUpperCase() + load.slice(1)} temperature extremes put stress on your system`,
+            `Regular maintenance prevents breakdowns during peak demand`,
+            `Clean filters and coils keep efficiency high`
+        ];
+
+        const steps = [
+            {
+                action: `Schedule pre-cooling service in ${hvac.annual_schedule[0].month}`,
+                priority: 'high',
+                why: 'Ensures AC is ready before summer heat hits'
+            },
+            {
+                action: `Schedule pre-heating service in ${hvac.annual_schedule[1].month}`,
+                priority: 'high',
+                why: 'Ensures heat works before winter cold arrives'
+            },
+            {
+                action: 'Change filters every 1-3 months',
+                priority: 'high',
+                why: 'Dirty filters reduce efficiency and strain the system'
+            },
+            {
+                action: 'Clear debris from outdoor unit',
+                priority: 'medium',
+                why: 'Blocked airflow makes the system work harder'
+            }
+        ];
+
+        return {
+            assessment,
+            risk_score: null,
+            risk_level: load,
+            causes,
+            steps,
+            follow_up: [
+                'How often should I change filters?',
+                'What does HVAC service include?',
+                'How long should my system last?'
+            ],
+            data_summary: {
+                location: zip,
+                records_analyzed: 365,
+                confidence: 'high'
+            }
+        };
+    }
+
+    /**
+     * Flood risk response
+     * 
+     * @private
+     */
+    _floodRiskResponse(risks, climateData, zip) {
+        const riskLevel = this._getRiskLevel(risks.flood_risk);
+        const precipTotal = climateData.reduce((sum, d) => sum + (d.precipitation || 0), 0);
+        const stormEvents = climateData.filter(d =>
+            d.storm_event === 'flood' ||
+            d.storm_event === 'flash_flood' ||
+            d.storm_intensity === 'severe'
+        ).length;
+
+        const assessment = `${zip} has ${riskLevel} flood risk based on rainfall patterns and storm history. ${precipTotal.toFixed(1)} inches of rain over the past year, with ${stormEvents} significant storm events.`;
+
+        const causes = [
+            `${precipTotal.toFixed(1)} inches of annual rainfall`,
+            `${stormEvents} severe storm events in the past year`,
+            `Local drainage and elevation also play a role`
+        ];
+
+        const steps = [
+            {
+                action: 'Check your property drainage',
+                priority: 'high',
+                why: 'Water should flow away from your foundation'
+            },
+            {
+                action: 'Keep gutters and downspouts clear',
+                priority: 'high',
+                why: 'Clogged gutters cause water to pool near foundation'
+            },
+            {
+                action: 'Consider a sump pump if you have a basement',
+                priority: 'medium',
+                why: 'Prevents basement flooding during heavy rains'
+            },
+            {
+                action: 'Review your flood insurance coverage',
+                priority: 'medium',
+                why: 'Standard homeowners insurance doesn't cover floods'
+      }
+        ];
+
+        return {
+            assessment,
+            risk_score: risks.flood_risk,
+            risk_level: riskLevel,
+            causes,
+            steps,
+            follow_up: [
+                'Do I need flood insurance?',
+                'How can I improve drainage?',
+                'What are signs of foundation water damage?'
+            ],
+            data_summary: {
+                location: zip,
+                records_analyzed: climateData.length,
+                confidence: this._getConfidence(climateData.length)
+            }
+        };
+    }
+
+    /**
+     * General maintenance response
+     * 
+     * @private
+     */
+    _generalMaintenanceResponse(maintenance, zip) {
+        const assessment = `Here's your year-round maintenance calendar for ${zip}, based on local climate patterns:`;
+
+        const steps = [
+            {
+                action: `Paint exterior: ${maintenance.painting.recommended_month}`,
+                priority: 'medium',
+                why: maintenance.painting.reasoning
+            },
+            {
+                action: `HVAC service: ${maintenance.hvac_service.annual_schedule[0].month} and ${maintenance.hvac_service.annual_schedule[1].month}`,
+                priority: 'high',
+                why: 'Twice-yearly service prevents breakdowns'
+            },
+            {
+                action: `Pressure wash: ${maintenance.pressure_washing.recommended_month}`,
+                priority: 'medium',
+                why: maintenance.pressure_washing.reasoning
+            },
+            {
+                action: `Roof inspection: ${maintenance.roof_inspection.recommended_month}`,
+                priority: 'high',
+                why: maintenance.roof_inspection.reasoning
+            },
+            {
+                action: 'Gutter cleaning: April and October',
+                priority: 'high',
+                why: 'Prevents water damage and foundation issues'
+            }
+        ];
+
+        return {
+            assessment,
+            risk_score: null,
+            risk_level: null,
+            causes: [],
+            steps,
+            follow_up: [
+                'What should I prioritize first?',
+                'Can I do any of this myself?',
+                'How much does professional service cost?'
+            ],
+            data_summary: {
+                location: zip,
+                records_analyzed: 365,
+                confidence: 'high'
+            }
+        };
+    }
+
+    /**
+     * General assessment response
+     * 
+     * @private
+     */
+    _generalAssessmentResponse(risks, maintenance, climateData, zip) {
+        const topRisks = this._getTopRisks(risks);
+
+        const assessment = `Based on ${zip}'s climate, here are the main things to watch for your home:`;
+
+        const causes = topRisks.map(risk =>
+            `${risk.name}: ${this._getRiskLevel(risk.score)} risk`
+        );
+
+        const steps = [
+            {
+                action: `Address ${topRisks[0].name.toLowerCase()} first`,
+                priority: 'high',
+                why: `This is your highest environmental risk (${(topRisks[0].score * 100).toFixed(0)}%)`
+            },
+            {
+                action: `Schedule HVAC service in ${maintenance.hvac_service.next_service}`,
+                priority: 'high',
+                why: 'Preventive maintenance saves money'
+            },
+            {
+                action: `Plan exterior painting for ${maintenance.painting.recommended_month}`,
+                priority: 'medium',
+                why: 'Optimal weather conditions'
+            }
+        ];
+
+        return {
+            assessment,
+            risk_score: null,
+            risk_level: null,
+            causes,
+            steps,
+            follow_up: [
+                'Tell me more about mold risk',
+                'When should I paint?',
+                'What maintenance is most urgent?'
+            ],
+            data_summary: {
+                location: zip,
+                records_analyzed: climateData.length,
+                confidence: this._getConfidence(climateData.length)
+            }
+        };
+    }
+
+    /**
+     * Error response matching CASA contract
+     * 
+     * @private
+     * @param {string} errorType - Error type
+     * @param {string} message - Error message
+     * @returns {Object} Error response
+     */
+    _errorResponse(errorType, message) {
+        return {
+            error: errorType,
+            message,
+            assessment: null,
+            risk_score: null,
+            risk_level: null,
+            causes: [],
+            steps: [],
+            follow_up: [],
+            data_summary: null
+        };
+    }
+
+    /**
+     * Fetch climate data from Croutons Graph
+     * 
+     * @private
+     * @param {string} zip - ZIP code
+     * @returns {Promise<Array>} Climate data
+     */
+    async _fetchClimateData(zip) {
+        try {
+            const response = await this.graphClient.query({
+                corpus: 'environmental.local_climate',
+                q: zip,
+                limit: 1000
+            });
+
+            return response.results
+                .map(r => r.triple || r.normalized || {})
+                .filter(d => d.date);
+        } catch (error) {
+            console.error('[oracle] Error fetching climate data:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Get risk level label
+     * 
+     * @private
+     * @param {number} score - Risk score 0-1
+     * @returns {string} Risk level
+     */
+    _getRiskLevel(score) {
+        if (score >= 0.7) return 'high';
+        if (score >= 0.4) return 'moderate';
+        return 'low';
+    }
+
+    /**
+     * Get confidence level
+     * 
+     * @private
+     * @param {number} dataPoints - Number of data points
+     * @returns {string} Confidence level
+     */
+    _getConfidence(dataPoints) {
+        if (dataPoints >= 365) return 'high';
+        if (dataPoints >= 180) return 'medium';
+        return 'low';
+    }
+
+    /**
+     * Calculate average
+     * 
+     * @private
+     * @param {Array} arr - Array of numbers
+     * @returns {number} Average
+     */
+    _average(arr) {
+        if (arr.length === 0) return 0;
+        return arr.reduce((a, b) => a + b, 0) / arr.length;
+    }
+
+    /**
+     * Calculate temperature swings
+     * 
+     * @private
+     * @param {Array} climateData - Climate data
+     * @returns {number} Average temperature swing
+     */
+    _calculateTempSwings(climateData) {
+        const swings = climateData
+            .filter(d => d.temp_max && d.temp_min)
+            .map(d => d.temp_max - d.temp_min);
+
+        return this._average(swings);
+    }
+
+    /**
+     * Get top risks
+     * 
+     * @private
+     * @param {Object} risks - Risk scores
+     * @returns {Array} Top 3 risks
+     */
+    _getTopRisks(risks) {
+        const riskArray = [
+            { name: 'Mold', score: risks.mold_risk },
+            { name: 'Roof rot', score: risks.roof_rot_risk },
+            { name: 'Siding expansion', score: risks.siding_expansion_risk },
+            { name: 'Flood', score: risks.flood_risk },
+            { name: 'Paint deterioration', score: risks.paint_deterioration_risk },
+            { name: 'Foundation stress', score: risks.foundation_stress_risk }
+        ];
+
+        return riskArray
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 3);
+    }
+}
+
+module.exports = EnvironmentalHomeRiskOracle;

@@ -1,0 +1,9 @@
+{"@type":"SafetySignal","name":"uniforms","description":"Staff wearing professional uniforms","reliability":"high","notes":"Indicates professional establishment"}
+{"@type":"SafetySignal","name":"open_storefront","description":"Shop has open, visible storefront facing street","reliability":"high","notes":"No hidden entrances or back-alley access"}
+{"@type":"SafetySignal","name":"posted_menu","description":"Prices clearly posted on menu board or wall","reliability":"high","notes":"Transparent pricing reduces scam risk"}
+{"@type":"SafetySignal","name":"visible_reception","description":"Reception desk visible from entrance","reliability":"high","notes":"Professional front-of-house presence"}
+{"@type":"SafetySignal","name":"professional_branding","description":"Consistent branding, signage, and marketing materials","reliability":"medium","notes":"Indicates established business"}
+{"@type":"SafetySignal","name":"franchise_chains","description":"Part of recognized franchise chain","reliability":"very_high","notes":"Chains like Health Land, Let's Relax have strict standards"}
+{"@type":"SafetySignal","name":"online_reviews","description":"Multiple verifiable online reviews from reputable platforms","reliability":"medium","notes":"Cross-reference reviews for consistency"}
+{"@type":"SafetySignal","name":"licensed_display","description":"Business license or certification displayed","reliability":"high","notes":"Shows regulatory compliance"}
+
