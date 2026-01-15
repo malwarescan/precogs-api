@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import { insertJob, getJob, getJobEvents, pool, getCrouton, getAllCroutons, getCroutonWithSourceTracking, upsertSourceParticipation, getSourceDomainStats } from "./src/db.js";
 import { enqueueJob } from "./src/redis.js";
 import { initiateVerification, checkVerification, requireVerifiedDomain } from "./src/routes/verify.js";
+import { ingestUrl } from "./src/routes/ingest.js";
 
 const app = express();
 
@@ -73,6 +74,9 @@ app.use(express.json({ limit: "1mb" }));
 // Verification routes
 app.post('/v1/verify/initiate', initiateVerification);
 app.post('/v1/verify/check', checkVerification);
+
+// Ingestion routes (require verified domain)
+app.post('/v1/ingest', requireVerifiedDomain, ingestUrl);
 
 // Bearer token authentication middleware (optional, enabled via API_KEY env var)
 function requireAuth(req, res, next) {
