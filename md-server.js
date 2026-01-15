@@ -98,6 +98,11 @@ function logRequest(req, status) {
   });
 }
 
+// Health check (must come before wildcard)
+app.get('/health', (req, res) => {
+  res.json({ ok: true, ts: new Date().toISOString() });
+});
+
 // Main markdown serving endpoint
 app.get('*', rateLimit, normalizeRequest, async (req, res) => {
   try {
@@ -160,11 +165,6 @@ app.get('*', rateLimit, normalizeRequest, async (req, res) => {
   }
 });
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ ok: true, ts: new Date().toISOString() });
-});
-
 // Cleanup rate limit entries
 setInterval(() => {
   const now = Date.now();
@@ -174,6 +174,15 @@ setInterval(() => {
     }
   }
 }, RATE_LIMIT_WINDOW * 2);
+
+// Debug: Log all registered routes on boot
+console.log('=== REGISTERED ROUTES ===');
+console.log(
+  app._router.stack
+    .map(r => r.route?.path || (r.regexp && r.regexp.source))
+    .filter(Boolean)
+);
+console.log('========================');
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`md-server listening on ${PORT}`);
