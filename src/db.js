@@ -77,5 +77,147 @@ export async function getJobEvents(jobId, limit = 1000) {
   return rows;
 }
 
+// Croutons functions
+export async function getCrouton(id) {
+  const { rows } = await pool.query(
+    `SELECT 
+       id::text,
+       claim,
+       entities,
+       confidence,
+       sources,
+       created_at::text,
+       updated_at::text
+     FROM croutons.croutons 
+     WHERE id = $1`,
+    [id]
+  );
+  return rows[0] || null;
+}
+
+export async function getAllCroutons(limit = 1000) {
+  const { rows } = await pool.query(
+    `SELECT 
+       id::text,
+       claim,
+       entities,
+       confidence,
+       sources,
+       created_at::text,
+       updated_at::text
+     FROM croutons.croutons 
+     ORDER BY updated_at DESC 
+     LIMIT $1`,
+    [limit]
+  );
+  return rows;
+}
+
+export async function insertCrouton(claim, entities = [], confidence = null, sources = []) {
+  const {
+    rows: [crouton],
+  } = await pool.query(
+    `INSERT INTO croutons.croutons (claim, entities, confidence, sources)
+     VALUES ($1, $2, $3, $4)
+     RETURNING 
+       id::text,
+       claim,
+       entities,
+       confidence,
+       sources,
+       created_at::text,
+       updated_at::text`,
+    [claim, entities, confidence, sources]
+  );
+  return crouton;
+}
+
+// Source tracking functions
+export async function getCroutonWithSourceTracking(id) {
+  const { rows } = await pool.query(
+    `SELECT 
+       c.id::text,
+       c.claim,
+       c.entities,
+       c.confidence,
+       c.sources,
+       c.created_at::text,
+       c.updated_at::text,
+       COALESCE(json_agg(
+         json_build_object(
+           'source_domain', sp.source_domain,
+           'source_url', sp.source_url,
+           'ai_readable_source', sp.ai_readable_source,
+           'markdown_discovered', sp.markdown_discovered,
+           'discovery_method', sp.discovery_method,
+           'first_observed', sp.first_observed::text,
+           'last_verified', sp.last_verified::text
+         )
+       ) FILTER (WHERE sp.id IS NOT NULL), '[]') as source_tracking
+     FROM croutons.croutons c
+     LEFT JOIN source_tracking.source_participation sp ON c.id = sp.crouton_id
+     WHERE c.id = $1
+     GROUP BY c.id, c.claim, c.entities, c.confidence, c.sources, c.created_at, c.updated_at`,
+    [id]
+  );
+  return rows[0] || null;
+}
+
+export async function upsertSourceParticipation(croutonId, sourceUrl, discoveryMethod, aiReadable = false, markdownDiscovered = false) {
+  const sourceDomain = await pool.query(
+    `SELECT source_tracking.extract_domain($1) as domain`,
+    [sourceUrl]
+  );
+  
+  const domain = sourceDomain.rows[0].domain;
+  
+  const { rows } = await pool.query(
+    `INSERT INTO source_tracking.source_participation 
+       (crouton_id, source_domain, source_url, discovery_method, ai_readable_source, markdown_discovered)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (crouton_id, source_url) 
+     DO UPDATE SET
+       discovery_method = EXCLUDED.discovery_method,
+       ai_readable_source = EXCLUDED.ai_readable_source,
+       markdown_discovered = EXCLUDED.markdown_discovered,
+       last_verified = NOW()
+     RETURNING 
+       crouton_id::text,
+       source_domain,
+       source_url,
+       ai_readable_source,
+       markdown_discovered,
+       discovery_method,
+       first_observed::text,
+       last_verified::text`,
+    [croutonId, domain, sourceUrl, discoveryMethod, aiReadable, markdownDiscovered]
+  );
+  
+  return rows[0];
+}
+
+export async function getSourceDomainStats() {
+  const { rows } = await pool.query(
+    `SELECT 
+       source_domain as domain,
+       COUNT(*) as crouton_count,
+       BOOL_OR(ai_readable_source) as markdown,
+       ARRAY_AGG(DISTINCT discovery_method) as discovery_methods,
+       MAX(last_verified) as last_seen
+     FROM source_tracking.source_participation
+     GROUP BY source_domain
+     ORDER BY crouton_count DESC`,
+    []
+  );
+  
+  return rows.map(row => ({
+    domain: row.domain,
+    crouton_count: parseInt(row.crouton_count),
+    markdown: row.markdown,
+    discovery_methods: row.discovery_methods,
+    last_seen: row.last_seen
+  }));
+}
+
 export { pool };
 

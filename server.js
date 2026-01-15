@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
-import { insertJob, getJob, getJobEvents, pool } from "./src/db.js";
+import { insertJob, getJob, getJobEvents, pool, getCrouton, getAllCroutons, getCroutonWithSourceTracking, upsertSourceParticipation, getSourceDomainStats } from "./src/db.js";
 import { enqueueJob } from "./src/redis.js";
 
 const app = express();
@@ -14,6 +14,11 @@ const RATE_LIMIT_WINDOW = 60000; // 1 minute
 const RATE_LIMIT_MAX = 60; // 60 requests per minute
 
 function rateLimit(req, res, next) {
+  // Exempt .md endpoints and feeds from rate limiting for AI agents
+  if (req.path.endsWith('.md') || req.path.startsWith('/feeds/')) {
+    return next();
+  }
+
   const ip = req.ip || req.connection.remoteAddress;
   const now = Date.now();
   
@@ -97,6 +102,146 @@ app.get("/health/redis", async (_req, res) => {
     const result = await testRedis();
     res.json({ ok: result, redis: process.env.REDIS_URL ? "configured" : "not configured" });
   } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Logging function for AI crawler monitoring
+function logRequest(req, responseType) {
+  console.log("[croutons]", {
+    timestamp: new Date().toISOString(),
+    path: req.path,
+    method: req.method,
+    accept: req.get("Accept"),
+    userAgent: req.get("User-Agent"),
+    responseType,
+    ip: req.ip || req.connection.remoteAddress
+  });
+}
+
+// Markdown serializer function with source tracking
+function serializeCroutonToMarkdown(crouton) {
+  const frontmatter = [
+    '---',
+    `id: ${crouton.id}`,
+    crouton.confidence ? `confidence: ${crouton.confidence}` : '',
+    crouton.sources && crouton.sources.length > 0 ? `sources:\n${crouton.sources.map(s => `  - ${s}`).join('\n')}` : '',
+    `updated: ${crouton.updated_at}`
+  ];
+
+  // Add source tracking metadata if available
+  if (crouton.source_tracking && crouton.source_tracking.length > 0) {
+    const primarySource = crouton.source_tracking[0]; // Use first source as primary
+    frontmatter.push(
+      `source_domain: ${primarySource.source_domain}`,
+      `source_url: ${primarySource.source_url}`,
+      `ai_readable_source: ${primarySource.ai_readable_source}`,
+      `markdown_discovery: ${primarySource.discovery_method}`,
+      `first_observed: ${primarySource.first_observed}`,
+      `last_verified: ${primarySource.last_verified}`
+    );
+  }
+
+  frontmatter.push('---', '');
+
+  return frontmatter.filter(Boolean).join('\n') + crouton.claim;
+}
+
+// GET /v1/croutons/:id - Deterministic read endpoint (JSON)
+// GET /v1/croutons/:id.md - Markdown endpoint
+// Content negotiation: Accept: text/markdown returns Markdown
+app.get(["/v1/croutons/:id", "/v1/croutons/:id.md"], async (req, res) => {
+  try {
+    const id = req.params.id;
+    const isMarkdownRequest = req.path.endsWith('.md') || req.get("Accept") === "text/markdown";
+    
+    // For Markdown requests, get full source tracking data
+    const crouton = isMarkdownRequest ? await getCroutonWithSourceTracking(id) : await getCrouton(id);
+
+    if (!crouton) {
+      return res.status(404).json({ ok: false, error: "Crouton not found" });
+    }
+
+    // Auto-discovery detection: if this is a Markdown request, track it
+    if (isMarkdownRequest && crouton.sources && crouton.sources.length > 0) {
+      const userAgent = req.get("User-Agent") || '';
+      const referer = req.get("Referer") || '';
+      
+      // Determine discovery method
+      let discoveryMethod = 'direct_md';
+      if (referer && referer.includes('/crouton/')) {
+        discoveryMethod = 'alternate_link';
+      } else if (userAgent.includes('bot') || userAgent.includes('crawler') || userAgent.includes('spider')) {
+        discoveryMethod = 'api';
+      }
+      
+      // Update source participation for each source
+      for (const sourceUrl of crouton.sources) {
+        try {
+          await upsertSourceParticipation(
+            id, 
+            sourceUrl, 
+            discoveryMethod, 
+            true, // ai_readable_source = true for confirmed Markdown access
+            true  // markdown_discovered = true
+          );
+        } catch (err) {
+          console.error('[source_tracking] Error updating participation:', err.message);
+        }
+      }
+    }
+    
+    if (isMarkdownRequest) {
+      logRequest(req, "markdown");
+      res.set("Content-Type", "text/markdown; charset=utf-8");
+      res.send(serializeCroutonToMarkdown(crouton));
+    } else {
+      logRequest(req, "json");
+      res.json({ ok: true, data: crouton });
+    }
+  } catch (e) {
+    console.error("[croutons] Error:", e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// GET /feeds/croutons.ndjson - NDJSON feed for AI agents
+app.get("/feeds/croutons.ndjson", async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 1000;
+    const croutons = await getAllCroutons(limit);
+
+    logRequest(req, "ndjson");
+    
+    res.set({
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-cache",
+      "Transfer-Encoding": "chunked"
+    });
+
+    // Stream each crouton as NDJSON line
+    for (const crouton of croutons) {
+      if (res.writableEnded) break;
+      res.write(JSON.stringify(crouton) + "\n");
+    }
+    
+    res.end();
+  } catch (e) {
+    console.error("[feeds] Error:", e);
+    if (!res.headersSent) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  }
+});
+
+// GET /api/source-stats - Derived dataset for Graph dashboard
+app.get("/api/source-stats", async (req, res) => {
+  try {
+    const stats = await getSourceDomainStats();
+    logRequest(req, "source-stats");
+    res.json({ ok: true, data: stats });
+  } catch (e) {
+    console.error("[source-stats] Error:", e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
