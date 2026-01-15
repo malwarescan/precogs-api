@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { insertJob, getJob, getJobEvents, pool, getCrouton, getAllCroutons, getCroutonWithSourceTracking, upsertSourceParticipation, getSourceDomainStats } from "./src/db.js";
 import { enqueueJob } from "./src/redis.js";
+import { initiateVerification, checkVerification, requireVerifiedDomain } from "./src/routes/verify.js";
 
 const app = express();
 
@@ -68,6 +69,10 @@ const corsOptions = process.env.NODE_ENV === "production"
   : { origin: true, credentials: true };
 app.use(cors(corsOptions));
 app.use(express.json({ limit: "1mb" }));
+
+// Verification routes
+app.post('/v1/verify/initiate', initiateVerification);
+app.post('/v1/verify/check', checkVerification);
 
 // Bearer token authentication middleware (optional, enabled via API_KEY env var)
 function requireAuth(req, res, next) {
