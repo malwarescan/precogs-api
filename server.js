@@ -11,6 +11,7 @@ import { renderMarkdown } from "./src/routes/render.js";
 import { activateMarkdown } from "./src/routes/admin.js";
 import { activateMarkdownWithEndorsement, verifyEndorsements } from "./src/routes/endorsement.js";
 import { rebuildOnIngestion, scheduledRebuild } from "./src/routes/rebuild.js";
+import { emitMarkdownGenerated, emitMarkdownActivated, emitMarkdownDeactivated, emitSourceParticipation } from "./src/routes/events.js";
 
 const app = express();
 

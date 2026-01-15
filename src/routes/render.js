@@ -3,6 +3,7 @@
 
 const crypto = require('crypto');
 const { pool } = require('../db');
+const { emitMarkdownGenerated } = require('./events.js');
 
 // Derive path from source URL (canonical, deterministic)
 function derivePath(sourceUrl) {
@@ -118,6 +119,9 @@ async function renderMarkdown(req, res) {
       ON CONFLICT (domain, path, content_hash) 
       DO NOTHING
     `, [domain, path, markdownContent, content_hash]);
+
+    // Emit markdown.generated event
+    await emitMarkdownGenerated(domain, path, content_hash);
 
     res.json({
       ok: true,

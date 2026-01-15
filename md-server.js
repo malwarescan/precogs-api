@@ -4,6 +4,7 @@
 const express = require('express');
 const cors = require('cors');
 const { pool } = require('./src/db.js');
+const { emitSourceParticipation } = require('./src/routes/events.js');
 
 const app = express();
 const PORT = process.env.PORT || 8081;
@@ -136,6 +137,13 @@ app.get('*', rateLimit, normalizeRequest, async (req, res) => {
       'ETag': `"${content_hash}"`,
       'Last-Modified': new Date(generated_at).toUTCString()
     });
+    
+    // Emit source participation event
+    await emitSourceParticipation(
+      domain, 
+      'alternate_link', 
+      req.get('User-Agent') || ''
+    );
     
     // Size limit (2MB)
     if (content.length > 2 * 1024 * 1024) {

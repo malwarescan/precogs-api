@@ -2,6 +2,7 @@
 // Endorsement verification for activation gating
 
 const { pool } = require('../db');
+const { emitMarkdownActivated, emitMarkdownDeactivated } = require('./events.js');
 
 // Parse <head> section and extract <link> tags
 function parseHeadLinks(html) {
@@ -115,6 +116,24 @@ async function checkEndorsement(domain, path) {
   }
 }
 
+// Emit activation event
+async function emitActivation(domain, path, reason) {
+  try {
+    await emitMarkdownActivated(domain, path, reason);
+  } catch (error) {
+    console.error('Failed to emit activation event:', error);
+  }
+}
+
+// Emit deactivation event
+async function emitDeactivation(domain, path, reason) {
+  try {
+    await emitMarkdownDeactivated(domain, path, reason);
+  } catch (error) {
+    console.error('Failed to emit deactivation event:', error);
+  }
+}
+
 // Enhanced activation with endorsement check
 async function activateMarkdownWithEndorsement(req, res) {
   try {
@@ -147,6 +166,13 @@ async function activateMarkdownWithEndorsement(req, res) {
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Markdown version not found' });
+    }
+
+    // Emit activation/deactivation events
+    if (is_active) {
+      await emitActivation(domain, 'endorsement_verified');
+    } else {
+      await emitDeactivation(domain, path, 'manual_deactivation');
     }
 
     res.json({
@@ -187,6 +213,8 @@ async function verifyEndorsements(req, res) {
           SET is_active = false, updated_at = NOW()
           WHERE domain = $1 AND path = $2
         `, [version.domain, version.path]);
+        
+        await emitDeactivation(version.domain, version.path, 'endorsement_missing');
         
         results.push({
           domain: version.domain,
