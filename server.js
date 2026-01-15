@@ -10,6 +10,7 @@ import { ingestUrl } from "./src/routes/ingest.js";
 import { renderMarkdown } from "./src/routes/render.js";
 import { activateMarkdown } from "./src/routes/admin.js";
 import { activateMarkdownWithEndorsement, verifyEndorsements } from "./src/routes/endorsement.js";
+import { rebuildOnIngestion, scheduledRebuild } from "./src/routes/rebuild.js";
 
 const app = express();
 
@@ -87,6 +88,10 @@ app.post('/v1/render', renderMarkdown);
 // Admin routes (protected)
 app.post('/v1/admin/activate', requireAuth, activateMarkdownWithEndorsement);
 app.post('/v1/admin/verify-endorsements', requireAuth, verifyEndorsements);
+
+// Rebuild routes
+app.post('/v1/rebuild/ingestion', rebuildOnIngestion);
+app.post('/v1/rebuild/scheduled', requireAuth, scheduledRebuild);
 
 // Bearer token authentication middleware (optional, enabled via API_KEY env var)
 function requireAuth(req, res, next) {
