@@ -86,7 +86,7 @@ function renderMarkdown(extractedContent, sourceUrl, contentHash) {
 }
 
 // POST /v1/render - Internal Markdown rendering
-async function renderMarkdown(req, res) {
+async function renderMarkdownRoute(req, res) {
   try {
     const { domain, source_url, content_hash, extracted_content } = req.body;
     
@@ -142,5 +142,5 @@ async function renderMarkdown(req, res) {
 }
 
 module.exports = {
-  renderMarkdown
+  renderMarkdown: renderMarkdownRoute
 };

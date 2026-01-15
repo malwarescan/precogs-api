@@ -7,7 +7,7 @@ import { insertJob, getJob, getJobEvents, pool, getCrouton, getAllCroutons, getC
 import { enqueueJob } from "./src/redis.js";
 import { initiateVerification, checkVerification, requireVerifiedDomain } from "./src/routes/verify.js";
 import { ingestUrl } from "./src/routes/ingest.js";
-import { renderMarkdown } from "./src/routes/render.js";
+import { renderMarkdown: renderMarkdownRoute } from "./src/routes/render.js";
 import { activateMarkdown } from "./src/routes/admin.js";
 import { activateMarkdownWithEndorsement, verifyEndorsements } from "./src/routes/endorsement.js";
 import { rebuildOnIngestion, scheduledRebuild } from "./src/routes/rebuild.js";
@@ -84,7 +84,7 @@ app.post('/v1/verify/check', checkVerification);
 app.post('/v1/ingest', requireVerifiedDomain, ingestUrl);
 
 // Render routes (internal, no auth)
-app.post('/v1/render', renderMarkdown);
+app.post('/v1/render', renderMarkdownRoute);
 
 // Admin routes (protected)
 app.post('/v1/admin/activate', requireAuth, activateMarkdownWithEndorsement);
