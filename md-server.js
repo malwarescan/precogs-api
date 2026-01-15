@@ -1,10 +1,10 @@
 // md-server.js
 // Lightweight Express service for md.croutons.ai hosting
 
-const express = require('express');
-const cors = require('cors');
-const { pool } = require('./src/db.js');
-const { emitSourceParticipation } = require('./src/routes/events.js');
+import express from 'express';
+import cors from 'cors';
+import { pool } from './src/db.js';
+import { emitSourceParticipation } from './src/routes/events.js';
 
 const app = express();
 const PORT = process.env.PORT || 8081;
