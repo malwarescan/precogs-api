@@ -7,6 +7,7 @@ import { insertJob, getJob, getJobEvents, pool, getCrouton, getAllCroutons, getC
 import { enqueueJob } from "./src/redis.js";
 import { initiateVerification, checkVerification, requireVerifiedDomain } from "./src/routes/verify.js";
 import { ingestUrl } from "./src/routes/ingest.js";
+import { renderMarkdown } from "./src/routes/render.js";
 
 const app = express();
 
@@ -77,6 +78,9 @@ app.post('/v1/verify/check', checkVerification);
 
 // Ingestion routes (require verified domain)
 app.post('/v1/ingest', requireVerifiedDomain, ingestUrl);
+
+// Render routes (internal, no auth)
+app.post('/v1/render', renderMarkdown);
 
 // Bearer token authentication middleware (optional, enabled via API_KEY env var)
 function requireAuth(req, res, next) {
