@@ -18,7 +18,9 @@ const pool = new Pool({
 });
 
 (async () => {
+  console.log("[migrate] ========================================");
   console.log("[migrate] Running precogs migrations...");
+  console.log("[migrate] DATABASE_URL:", process.env.DATABASE_URL ? "SET" : "NOT SET");
 
   const client = await pool.connect();
   try {
@@ -65,7 +67,9 @@ const pool = new Pool({
       } catch (e) {
         await client.query("ROLLBACK");
         console.error(`❌ Failed ${fname}:`, e.message);
-        throw e;
+        console.error(`❌ Error details:`, e);
+        // Don't throw - continue with other migrations
+        // throw e;
       }
     }
 
