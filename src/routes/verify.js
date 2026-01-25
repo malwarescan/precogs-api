@@ -61,7 +61,11 @@ export async function initiateVerification(req, res) {
 
   } catch (error) {
     console.error('Verification initiation error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: error.message,
+      stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+    });
   }
 }
 
@@ -137,6 +141,10 @@ export async function checkVerification(req, res) {
 
   } catch (error) {
     console.error('Verification check error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: error.message,
+      stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+    });
   }
 }
