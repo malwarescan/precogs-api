@@ -4,15 +4,138 @@
 import crypto from 'crypto';
 import { pool } from '../db.js';
 
-// Extract content using Readability-style algorithm
-function extractContent(html) {
-  // Simple content extraction (can be enhanced with @mozilla/readability later)
+// Extract JSON-LD structured data from HTML
+function extractJSONLD(html) {
+  const schemas = [];
+  const jsonLdRegex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>(.*?)<\/script>/gis;
+  let match;
+  while ((match = jsonLdRegex.exec(html)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      schemas.push(parsed);
+    } catch (e) {
+      // Skip invalid JSON
+    }
+  }
+  return schemas;
+}
+
+// Extract meta tags for LLM context
+function extractMetaTags(html) {
+  const meta = {
+    description: '',
+    keywords: '',
+    author: '',
+    og: {},
+    twitter: {}
+  };
+
+  // Standard meta tags
+  const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i);
+  if (descMatch) meta.description = descMatch[1].trim();
+
+  const keywordsMatch = html.match(/<meta[^>]*name=["']keywords["'][^>]*content=["']([^"']+)["']/i);
+  if (keywordsMatch) meta.keywords = keywordsMatch[1].trim();
+
+  const authorMatch = html.match(/<meta[^>]*name=["']author["'][^>]*content=["']([^"']+)["']/i);
+  if (authorMatch) meta.author = authorMatch[1].trim();
+
+  // Open Graph tags
+  const ogRegex = /<meta[^>]*property=["']og:(\w+)["'][^>]*content=["']([^"']+)["']/gi;
+  let ogMatch;
+  while ((ogMatch = ogRegex.exec(html)) !== null) {
+    meta.og[ogMatch[1]] = ogMatch[2].trim();
+  }
+
+  // Twitter Card tags
+  const twitterRegex = /<meta[^>]*name=["']twitter:(\w+)["'][^>]*content=["']([^"']+)["']/gi;
+  let twitterMatch;
+  while ((twitterMatch = twitterRegex.exec(html)) !== null) {
+    meta.twitter[twitterMatch[1]] = twitterMatch[2].trim();
+  }
+
+  return meta;
+}
+
+// Extract links for graph building
+function extractLinks(html, baseUrl) {
+  const links = {
+    internal: [],
+    external: []
+  };
+
+  try {
+    const base = new URL(baseUrl);
+    const linkRegex = /<a[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi;
+    let linkMatch;
+    while ((linkMatch = linkRegex.exec(html)) !== null) {
+      const href = linkMatch[1].trim();
+      const text = linkMatch[2].replace(/<[^>]*>/g, '').trim();
+      
+      if (!href || href.startsWith('#') || href.startsWith('javascript:')) continue;
+
+      try {
+        const url = new URL(href, baseUrl);
+        const link = { url: url.href, text };
+        
+        if (url.origin === base.origin) {
+          links.internal.push(link);
+        } else {
+          links.external.push(link);
+        }
+      } catch {
+        // Invalid URL, skip
+      }
+    }
+  } catch (error) {
+    // Skip link extraction on error
+  }
+
+  return links;
+}
+
+// Extract images with alt text for LLM context
+function extractImages(html, baseUrl) {
+  const images = [];
+  try {
+    const base = new URL(baseUrl);
+    const imgRegex = /<img[^>]*>/gi;
+    let imgMatch;
+    while ((imgMatch = imgRegex.exec(html)) !== null) {
+      const imgTag = imgMatch[0];
+      const srcMatch = imgTag.match(/src=["']([^"']+)["']/i);
+      const altMatch = imgTag.match(/alt=["']([^"']*)["']/i);
+      
+      if (srcMatch) {
+        try {
+          const src = new URL(srcMatch[1], baseUrl).href;
+          images.push({
+            src,
+            alt: altMatch ? altMatch[1].trim() : ''
+          });
+        } catch {
+          // Invalid URL, skip
+        }
+      }
+    }
+  } catch (error) {
+    // Skip image extraction on error
+  }
+  return images;
+}
+
+// Extract content using Readability-style algorithm, enhanced for LLM crawling
+function extractContent(html, baseUrl) {
   const content = {
     title: '',
+    meta: {},
+    structured_data: [],
     headings: [],
     body: '',
     lists: [],
-    tables: []
+    tables: [],
+    links: { internal: [], external: [] },
+    images: []
   };
 
   try {
@@ -22,8 +145,14 @@ function extractContent(html) {
       content.title = titleMatch[1].trim();
     }
 
-    // Extract headings (h1-h4)
-    const headingRegex = /<h([1-4])[^>]*>([^<]+)<\/h\1>/gi;
+    // Extract meta tags (critical for LLM context)
+    content.meta = extractMetaTags(html);
+
+    // Extract JSON-LD structured data (critical for LLM entity extraction)
+    content.structured_data = extractJSONLD(html);
+
+    // Extract headings (h1-h6 for better hierarchy)
+    const headingRegex = /<h([1-6])[^>]*>([^<]+)<\/h\1>/gi;
     let headingMatch;
     while ((headingMatch = headingRegex.exec(html)) !== null) {
       content.headings.push({
@@ -53,20 +182,52 @@ function extractContent(html) {
 
       content.body = bodyContent;
 
-      // Extract lists (simple pattern)
-      const listMatches = bodyContent.match(/(?:^|\n)[\*\-\+]\s+.+/gm);
-      if (listMatches) {
-        content.lists = listMatches.map(item => item.replace(/^[\*\-\+]\s+/, '').trim());
+      // Extract lists (both ordered and unordered)
+      const ulRegex = /<ul[^>]*>([\s\S]*?)<\/ul>/gi;
+      const olRegex = /<ol[^>]*>([\s\S]*?)<\/ol>/gi;
+      let listMatch;
+      
+      while ((listMatch = ulRegex.exec(html)) !== null || (listMatch = olRegex.exec(html)) !== null) {
+        const items = listMatch[1].match(/<li[^>]*>(.*?)<\/li>/gi);
+        if (items) {
+          items.forEach(item => {
+            const text = item.replace(/<[^>]*>/g, '').trim();
+            if (text) content.lists.push(text);
+          });
+        }
       }
 
-      // Extract tables (simple pattern)
+      // Extract tables (keep structure for LLM)
       const tableRegex = /<table[^>]*>([\s\S]*?)<\/table>/gis;
       let tableMatch;
       while ((tableMatch = tableRegex.exec(html)) !== null) {
-        content.tables.push({
-          html: tableMatch[0] // Keep raw HTML for tables
-        });
+        // Extract table rows and cells
+        const rows = [];
+        const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+        let rowMatch;
+        while ((rowMatch = rowRegex.exec(tableMatch[1])) !== null) {
+          const cells = [];
+          const cellRegex = /<t[dh][^>]*>(.*?)<\/t[dh]>/gi;
+          let cellMatch;
+          while ((cellMatch = cellRegex.exec(rowMatch[1])) !== null) {
+            cells.push(cellMatch[1].replace(/<[^>]*>/g, '').trim());
+          }
+          if (cells.length > 0) rows.push(cells);
+        }
+        if (rows.length > 0) {
+          content.tables.push({ rows });
+        }
       }
+    }
+
+    // Extract links (for graph building and LLM context)
+    if (baseUrl) {
+      content.links = extractLinks(html, baseUrl);
+    }
+
+    // Extract images (for LLM visual context)
+    if (baseUrl) {
+      content.images = extractImages(html, baseUrl);
     }
 
   } catch (error) {
@@ -130,8 +291,8 @@ export async function ingestUrl(req, res) {
         fetched_at = NOW()
     `, [domain, canonicalUrl, html]);
 
-    // Extract content
-    const extractedContent = extractContent(html);
+    // Extract content (enhanced for LLM crawling)
+    const extractedContent = extractContent(html, canonicalUrl);
     const contentHash = computeContentHash(extractedContent);
 
     res.json({
