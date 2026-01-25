@@ -116,22 +116,19 @@ function removeBoilerplate(text, linkTexts) {
 // Extract sections from HTML using heading hierarchy
 function extractSections(html, url, docId) {
   const sections = [];
-  const headings = [];
   
   // Extract all headings with their positions
   const headingRegex = /<h([1-6])[^>]*>(.*?)<\/h\1>/gi;
-  const headingMatches = [];
+  const headings = [];
   let match;
   while ((match = headingRegex.exec(html)) !== null) {
-    headingMatches.push({
+    headings.push({
       level: parseInt(match[1]),
       text: match[2].replace(/<[^>]*>/g, '').trim(),
       position: match.index,
       fullMatch: match[0]
     });
   }
-  
-  const headings = headingMatches;
   
   if (headings.length === 0) {
     // No headings, create one section from body
