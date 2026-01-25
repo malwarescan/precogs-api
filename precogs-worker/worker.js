@@ -196,14 +196,68 @@ async function processJob(jobId, precog, prompt, context, retryCount = 0) {
           }
         }
       } else if (contentSource === "url" && url) {
-        // URL mode (legacy - fetch and process)
+        // URL mode - fetch and process
         await insertEvent(jobId, "answer.delta", {
-          text: `Processing URL: ${url}\n`,
+          text: `Fetching URL: ${url}\n`,
         });
-        // TODO: Fetch URL, extract JSON-LD, then validate
-        await insertEvent(jobId, "answer.delta", {
-          text: `⚠️ URL processing not yet implemented. Use inline content mode for schema validation.\n`,
-        });
+        
+        try {
+          // Fetch HTML from URL
+          const response = await fetch(url, {
+            headers: {
+              'User-Agent': 'Croutons-Precog/1.0'
+            }
+          });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          
+          const html = await response.text();
+          await insertEvent(jobId, "answer.delta", {
+            text: `✅ Fetched ${html.length} bytes\nExtracting JSON-LD schemas...\n`,
+          });
+          
+          // Extract JSON-LD from HTML
+          const schemas = extractJSONLD(html);
+          
+          if (schemas.length === 0) {
+            await insertEvent(jobId, "answer.delta", {
+              text: `⚠️ No JSON-LD schemas found in ${url}\n`,
+            });
+          } else {
+            await insertEvent(jobId, "answer.delta", {
+              text: `Found ${schemas.length} JSON-LD schema(s)\n\n`,
+            });
+            
+            // Validate each schema
+            for (const schema of schemas) {
+              const schemaType = schema["@type"] || (Array.isArray(schema["@type"]) ? schema["@type"][0] : "Unknown");
+              const normalizedType = Array.isArray(schemaType) ? schemaType[0] : schemaType;
+              
+              // Check if type matches requested type (if specified)
+              if (type && normalizedType !== type) {
+                await insertEvent(jobId, "answer.delta", {
+                  text: `⏭️  Skipping ${normalizedType} (requested: ${type})\n`,
+                });
+                continue;
+              }
+              
+              // Validate against rules
+              const issues = validateJsonLdAgainstRules(schema, rules);
+              const recommendations = buildRecommendations(schema, rules);
+              const output = prettyPrintResult(normalizedType, issues, recommendations, schema);
+              
+              await insertEvent(jobId, "answer.delta", {
+                text: output,
+              });
+            }
+          }
+        } catch (error) {
+          await insertEvent(jobId, "answer.delta", {
+            text: `❌ Error processing URL: ${error.message}\n`,
+          });
+        }
       } else {
         await insertEvent(jobId, "answer.delta", {
           text: `⚠️ No content or URL provided. Please provide inline content or a URL.\n`,
@@ -224,9 +278,32 @@ async function processJob(jobId, precog, prompt, context, retryCount = 0) {
           });
         }
       } else if (contentSource === "url" && url) {
-        await insertEvent(jobId, "answer.delta", {
-          text: `Processing URL: ${url}\n⚠️ URL processing not yet implemented.\n`,
-        });
+        try {
+          await insertEvent(jobId, "answer.delta", {
+            text: `Fetching URL: ${url}\n`,
+          });
+          const response = await fetch(url, {
+            headers: { 'User-Agent': 'Croutons-Precog/1.0' }
+          });
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const html = await response.text();
+          const schemas = extractJSONLD(html);
+          if (schemas.length > 0) {
+            await insertEvent(jobId, "answer.delta", {
+              text: `Found ${schemas.length} JSON-LD schema(s):\n\`\`\`json\n${JSON.stringify(schemas, null, 2)}\n\`\`\`\n`,
+            });
+          } else {
+            await insertEvent(jobId, "answer.delta", {
+              text: `No JSON-LD schemas found in ${url}\n`,
+            });
+          }
+        } catch (error) {
+          await insertEvent(jobId, "answer.delta", {
+            text: `Error fetching URL: ${error.message}\n`,
+          });
+        }
       }
     }
 
