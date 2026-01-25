@@ -3,7 +3,10 @@
 // SINR-aligned retrieval substrate with deterministic truth substrate
 
 import crypto from 'crypto';
+import { parse } from 'node-html-parser';
 import { pool } from '../db.js';
+import { loadKB } from '../../../../precogs-worker/src/kb.js';
+import { validateJsonLdAgainstRules, buildRecommendations } from '../../../../precogs-worker/src/validateSchema.js';
 
 // Generate deterministic ID from components
 function generateId(...components) {
@@ -12,11 +15,173 @@ function generateId(...components) {
 }
 
 // Extract JSON-LD structured data from HTML
-function extractJSONLD(html) {
+const SCHEMA_CONTEXT = 'https://schema.org';
+const schemaKB = loadKB('schema-foundation');
+
+function normalizeSchemaType(rawType) {
+  if (!rawType) return '';
+  const cleaned = rawType.trim();
+  if (!cleaned) return '';
+  if (cleaned.includes('://')) {
+    return cleaned.substring(cleaned.lastIndexOf('/') + 1);
+  }
+  if (cleaned.includes(':')) {
+    return cleaned.split(':').pop();
+  }
+  return cleaned;
+}
+
+function assignPropertyValue(target, name, value) {
+  if (value === null || value === undefined || value === '') return;
+  if (target[name]) {
+    if (Array.isArray(target[name])) {
+      target[name].push(value);
+    } else {
+      target[name] = [target[name], value];
+    }
+  } else {
+    target[name] = value;
+  }
+}
+
+function getPropertyNames(attribute) {
+  if (!attribute) return [];
+  return attribute
+    .split(/\s+/)
+    .map(name => name.trim())
+    .filter(Boolean);
+}
+
+function getElementValue(element) {
+  if (!element || !element.getAttribute) return '';
+  const attrs = ['content', 'datetime', 'value', 'href', 'src'];
+  for (const attr of attrs) {
+    const attrValue = element.getAttribute(attr);
+    if (attrValue) return attrValue.trim();
+  }
+  return (element.text || '').trim();
+}
+
+function isDescendantOfNestedScope(node, scope) {
+  let current = node?.parentNode;
+  while (current && current !== scope) {
+    if (current.getAttribute && current.getAttribute('itemscope') !== null) {
+      return true;
+    }
+    current = current.parentNode;
+  }
+  return false;
+}
+
+function isDescendantOfNestedType(node, scope) {
+  let current = node?.parentNode;
+  while (current && current !== scope) {
+    if (current.getAttribute && current.getAttribute('typeof')) {
+      return true;
+    }
+    current = current.parentNode;
+  }
+  return false;
+}
+
+function buildMicrodataItem(scope) {
+  const item = { '@context': SCHEMA_CONTEXT };
+  const rawType = scope.getAttribute('itemtype');
+  const normalizedTypes = (rawType || '')
+    .split(/\s+/)
+    .map(normalizeSchemaType)
+    .filter(Boolean);
+  if (normalizedTypes.length === 1) {
+    item['@type'] = normalizedTypes[0];
+  } else if (normalizedTypes.length > 1) {
+    item['@type'] = normalizedTypes;
+  } else {
+    item['@type'] = 'Thing';
+  }
+  const itemId = scope.getAttribute('itemid');
+  if (itemId) {
+    item['@id'] = itemId;
+  }
+  const properties = collectMicrodataProperties(scope);
+  Object.assign(item, properties);
+  return item;
+}
+
+function collectMicrodataProperties(scope) {
+  const props = {};
+  const propElements = scope.querySelectorAll('[itemprop]');
+  for (const propEl of propElements) {
+    const propName = propEl.getAttribute('itemprop');
+    if (!propName) continue;
+    if (propEl === scope) continue;
+    if (isDescendantOfNestedScope(propEl, scope)) continue;
+    const nestedScope = propEl.getAttribute('itemscope') !== null;
+    const value = nestedScope ? buildMicrodataItem(propEl) : getElementValue(propEl);
+    for (const namePart of getPropertyNames(propName)) {
+      assignPropertyValue(props, namePart, value);
+    }
+  }
+  return props;
+}
+
+function extractMicrodata(html) {
+  if (!html) return { items: [], itemCount: 0 };
+  const root = parse(html);
+  const scopes = root.querySelectorAll('[itemscope]');
+  const items = Array.from(scopes).map(scope => buildMicrodataItem(scope));
+  return { items, itemCount: items.length };
+}
+
+function collectRdfaProperties(node) {
+  const props = {};
+  const propElements = node.querySelectorAll('[property]');
+  for (const propEl of propElements) {
+    const propName = propEl.getAttribute('property');
+    if (!propName) continue;
+    if (isDescendantOfNestedType(propEl, node)) continue;
+    const value = getElementValue(propEl);
+    for (const namePart of getPropertyNames(propName)) {
+      assignPropertyValue(props, namePart, value);
+    }
+  }
+  return props;
+}
+
+function extractRdfa(html) {
+  if (!html) return { items: [], tripleCount: 0 };
+  const root = parse(html);
+  const nodes = root.querySelectorAll('[typeof]');
+  const items = [];
+  let tripleCount = 0;
+  for (const node of nodes) {
+    const rawTypes = (node.getAttribute('typeof') || '').split(/\s+/);
+    const normalizedTypes = rawTypes.map(normalizeSchemaType).filter(Boolean);
+    const item = { '@context': SCHEMA_CONTEXT };
+    if (normalizedTypes.length === 1) {
+      item['@type'] = normalizedTypes[0];
+    } else if (normalizedTypes.length > 1) {
+      item['@type'] = normalizedTypes;
+    } else {
+      item['@type'] = 'Thing';
+    }
+    const props = collectRdfaProperties(node);
+    tripleCount += Object.values(props).reduce((sum, value) => {
+      if (Array.isArray(value)) return sum + value.length;
+      return sum + (value ? 1 : 0);
+    }, 0);
+    Object.assign(item, props);
+    items.push(item);
+  }
+  return { items, tripleCount };
+}
+
+function extractJsonLdBlocks(html) {
   const schemas = [];
   const jsonLdRegex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>(.*?)<\/script>/gis;
+  let jsonldCount = 0;
   let match;
   while ((match = jsonLdRegex.exec(html)) !== null) {
+    jsonldCount++;
     try {
       const parsed = JSON.parse(match[1]);
       schemas.push(parsed);
@@ -24,7 +189,275 @@ function extractJSONLD(html) {
       // Skip invalid JSON
     }
   }
-  return schemas;
+  return { schemas, blockCount: jsonldCount };
+}
+
+function normalizeSchemaItem(item) {
+  if (!item || typeof item !== 'object') return null;
+  const normalized = { ...item };
+  normalized['@context'] = normalized['@context'] || SCHEMA_CONTEXT;
+  const rawTypes = Array.isArray(normalized['@type'])
+    ? normalized['@type']
+    : normalized['@type']
+    ? [normalized['@type']]
+    : [];
+  const normalizedTypes = rawTypes.map(normalizeSchemaType).filter(Boolean);
+  if (normalizedTypes.length === 1) {
+    normalized['@type'] = normalizedTypes[0];
+  } else if (normalizedTypes.length > 1) {
+    normalized['@type'] = normalizedTypes;
+  } else {
+    normalized['@type'] = 'Thing';
+  }
+  return normalized;
+}
+
+function extractAllSchema(html) {
+  const jsonLdResult = extractJsonLdBlocks(html);
+  const microdataResult = extractMicrodata(html);
+  const rdfaResult = extractRdfa(html);
+  const rawItems = [
+    ...jsonLdResult.schemas,
+    ...microdataResult.items,
+    ...rdfaResult.items
+  ];
+  const structuredData = rawItems
+    .map(normalizeSchemaItem)
+    .filter(Boolean);
+  const schemaTypes = new Set();
+  structuredData.forEach(item => {
+    const types = Array.isArray(item['@type'])
+      ? item['@type']
+      : item['@type']
+      ? [item['@type']]
+      : [];
+    types.forEach(type => {
+      if (type) schemaTypes.add(type);
+    });
+  });
+  return {
+    structured_data: structuredData,
+    extraction_stats: {
+      jsonld_block_count: jsonLdResult.blockCount,
+      microdata_item_count: microdataResult.itemCount,
+      rdfa_triple_count: rdfaResult.tripleCount,
+      extracted_schema_types: Array.from(schemaTypes).sort()
+    }
+  };
+}
+
+function hasSchemaPath(obj, path) {
+  if (!obj || !path) return false;
+  const segments = path.split('.');
+  let current = obj;
+  for (const segment of segments) {
+    if (current == null) return false;
+    current = current[segment];
+  }
+  return current !== undefined;
+}
+
+function collectSchemaItems(structuredData) {
+  const items = [];
+  if (!structuredData) return items;
+  for (const schema of structuredData) {
+    const graph = Array.isArray(schema['@graph']) ? schema['@graph'] : [schema];
+    for (const item of graph) {
+      if (item && typeof item === 'object') {
+        items.push(item);
+      }
+    }
+  }
+  return items;
+}
+
+function analyzeSchemaCoverage(structuredData, extractionStats = {}) {
+  const detected = new Set(extractionStats?.extracted_schema_types || []);
+  const present = new Set();
+  const missing = new Set();
+  const recommendedTypes = new Set();
+  const kbTypes = schemaKB?.types || {};
+  const schemaItems = collectSchemaItems(structuredData);
+
+  for (const item of schemaItems) {
+    const rawTypes = Array.isArray(item['@type']) ? item['@type'] : [item['@type']];
+    for (const rawType of rawTypes) {
+      const type = normalizeSchemaType(rawType);
+      if (!type) continue;
+      detected.add(type);
+      const rules = kbTypes[type];
+      if (!rules) continue;
+      const issues = validateJsonLdAgainstRules(item, rules);
+      for (const issue of issues) {
+        if (issue.code === 'missing' && issue.path) {
+          missing.add(`${type}.${issue.path}`);
+        }
+      }
+      const paths = [...(rules.required || []), ...(rules.recommended || [])];
+      for (const path of paths) {
+        if (hasSchemaPath(item, path)) {
+          present.add(`${type}.${path}`);
+        }
+      }
+      const recommendations = buildRecommendations(item, rules);
+      if (recommendations.length > 0) {
+        recommendedTypes.add(type);
+      }
+    }
+  }
+
+  return {
+    detected_schema_types: Array.from(detected).sort(),
+    present_schema_checks: Array.from(present).sort(),
+    missing_schema_checks: Array.from(missing).sort(),
+    recommended_next_types: Array.from(recommendedTypes).sort()
+  };
+}
+
+function generateSchemaEdges(entities = [], pageUrl = '', baseUrl = '') {
+  const edges = [];
+  if (!entities || entities.length === 0) return edges;
+
+  const byType = {};
+  for (const entity of entities) {
+    if (!entity || !entity.entity_type) continue;
+    const entityTypes = Array.isArray(entity.entity_type) ? entity.entity_type : [entity.entity_type];
+    for (const type of entityTypes) {
+      if (!type) continue;
+      if (!byType[type]) byType[type] = [];
+      byType[type].push(entity);
+    }
+  }
+
+  const org = byType['Organization']?.[0];
+  const website = byType['WebSite']?.[0];
+  const page = byType['WebPage']?.[0];
+  const persons = byType['Person'] || [];
+  const services = byType['Service'] || [];
+  const softwareApps = byType['SoftwareApplication'] || [];
+  const products = byType['Product'] || [];
+
+  const pushEdge = (edge) => {
+    if (edge) edges.push(edge);
+  };
+
+  if (org && website) {
+    pushEdge({
+      edge_type: 'owns',
+      edge_label: 'owns',
+      from_entity_id: org.entity_id,
+      to_entity_id: website.entity_id,
+      from_entity_type: 'Organization',
+      to_entity_type: 'WebSite',
+      confidence: 0.95
+    });
+  }
+
+  if (website && page) {
+    pushEdge({
+      edge_type: 'hasPage',
+      edge_label: 'hasPage',
+      from_entity_id: website.entity_id,
+      to_entity_id: page.entity_id,
+      from_entity_type: 'WebSite',
+      to_entity_type: 'WebPage',
+      confidence: 0.9
+    });
+    pushEdge({
+      edge_type: 'published_by',
+      edge_label: 'published_by',
+      from_entity_id: page.entity_id,
+      to_entity_id: website.entity_id,
+      from_entity_type: 'WebPage',
+      to_entity_type: 'WebSite',
+      confidence: 0.8
+    });
+  }
+
+  if (page && org) {
+    pushEdge({
+      edge_type: 'published_by',
+      edge_label: 'published_by',
+      from_entity_id: page.entity_id,
+      to_entity_id: org.entity_id,
+      from_entity_type: 'WebPage',
+      to_entity_type: 'Organization',
+      confidence: 0.8
+    });
+  }
+
+  const linkEntityToOrg = (entity, edgeType, edgeLabel) => {
+    if (!entity || !org) return;
+    pushEdge({
+      edge_type: edgeType,
+      edge_label: edgeLabel,
+      from_entity_id: entity.entity_id,
+      to_entity_id: org.entity_id,
+      from_entity_type: entity.entity_type,
+      to_entity_type: 'Organization',
+      confidence: 0.85
+    });
+  };
+
+  const linkPageToEntity = (entity, label) => {
+    if (!page || !entity) return;
+    pushEdge({
+      edge_type: 'about',
+      edge_label: label || 'about',
+      from_entity_id: page.entity_id,
+      to_entity_id: entity.entity_id,
+      from_entity_type: 'WebPage',
+      to_entity_type: entity.entity_type,
+      confidence: 0.75
+    });
+  };
+
+  const linkEntityToPage = (entity, label) => {
+    if (!page || !entity) return;
+    pushEdge({
+      edge_type: 'features',
+      edge_label: label || 'features',
+      from_entity_id: entity.entity_id,
+      to_entity_id: page.entity_id,
+      from_entity_type: entity.entity_type,
+      to_entity_type: 'WebPage',
+      confidence: 0.7
+    });
+  };
+
+  for (const person of persons) {
+    linkEntityToOrg(person, 'worksFor', 'worksFor');
+    linkPageToEntity(person, 'about_person');
+  }
+
+  for (const service of services) {
+    linkEntityToOrg(service, 'provider', 'provider');
+    linkPageToEntity(service, 'about_service');
+  }
+
+  for (const app of [...softwareApps, ...products]) {
+    linkEntityToOrg(app, 'publisher', 'publisher');
+    linkPageToEntity(app, 'about_application');
+  }
+
+  const additionalEntities = entities.filter(e => !['Organization', 'WebSite', 'WebPage'].includes(e.entity_type));
+  for (const entity of additionalEntities) {
+    if (entity.entity_type === 'Person' || entity.entity_type === 'Service' || entity.entity_type === 'SoftwareApplication' || entity.entity_type === 'Product') continue;
+    linkPageToEntity(entity, 'about_entity');
+    if (org) {
+      pushEdge({
+        edge_type: 'connected_to',
+        edge_label: 'connected_to_org',
+        from_entity_id: entity.entity_id,
+        to_entity_id: org.entity_id,
+        from_entity_type: entity.entity_type,
+        to_entity_type: 'Organization',
+        confidence: 0.5
+      });
+    }
+  }
+
+  return edges;
 }
 
 // Extract meta tags for LLM context
@@ -471,6 +904,14 @@ function extractDefinitionUnits(sections, docId, url, docCleanText) {
 
 // REQUIREMENT 3: Truth gating - validate facts are grounded
 function validateFactGrounding(unit, schemas, html) {
+  const labelValuePatterns = [
+    /(?:phone|telephone|tel):\s*([+\d\s\-\(\)]+)/i,
+    /(?:address):\s*([^\n]+)/i,
+    /(?:hours|open|hours of operation):\s*([^\n]+)/i,
+    /(?:price|pricing|cost):\s*([^\n]+)/i
+  ];
+  const hasTextEvidence = labelValuePatterns.some(pattern => pattern.test(unit.clean_text));
+
   // Check if unit is schema-grounded
   if (unit.triple && unit.triple.source_jsonld_ref) {
     // Verify the JSON pointer exists
@@ -480,34 +921,24 @@ function validateFactGrounding(unit, schemas, html) {
         if (item['@id'] === unit.triple.source_jsonld_ref) {
           return {
             grounded: true,
-            grounding_type: 'schema',
-            confidence: 0.95,
+            grounding_type: hasTextEvidence ? 'schema_text' : 'schema',
+            confidence: hasTextEvidence ? 0.97 : 0.95,
             source_pointer: unit.triple.source_jsonld_ref
           };
         }
       }
     }
   }
-  
-  // Check if unit matches visible label-value patterns
-  const labelValuePatterns = [
-    /(?:phone|telephone|tel):\s*([+\d\s\-\(\)]+)/i,
-    /(?:address):\s*([^\n]+)/i,
-    /(?:hours|open|hours of operation):\s*([^\n]+)/i,
-    /(?:price|pricing|cost):\s*([^\n]+)/i
-  ];
-  
-  for (const pattern of labelValuePatterns) {
-    if (pattern.test(unit.clean_text)) {
-      return {
-        grounded: true,
-        grounding_type: 'visible_text',
-        confidence: 0.85,
-        source_pointer: 'label-value-pattern'
-      };
-    }
+
+  if (hasTextEvidence) {
+    return {
+      grounded: true,
+      grounding_type: 'visible_text',
+      confidence: 0.85,
+      source_pointer: 'label-value-pattern'
+    };
   }
-  
+
   // Check if it's a metadata-only fact (page-level only)
   if (unit.unit_type === 'fact') {
     const metadataFacts = ['title', 'description', 'canonical_url'];
@@ -520,7 +951,7 @@ function validateFactGrounding(unit, schemas, html) {
       };
     }
   }
-  
+
   // Not grounded - downgrade to claim
   return {
     grounded: false,
@@ -1375,16 +1806,20 @@ function detectVertical(schemas) {
 }
 
 // REQUIREMENT 9: Citations Guarantee QA gate
-function runQAGate(units, sections, docCleanText, boilerplateSignals) {
+function runQAGate(units, sections, docCleanText, boilerplateSignals, schemaCheckReport = {}, edges = []) {
   const errors = [];
   const fixSuggestions = [];
+  const schemaChecks = {
+    missing_schema_checks: schemaCheckReport?.missing_schema_checks || [],
+    present_schema_checks: schemaCheckReport?.present_schema_checks || [],
+    detected_schema_types: schemaCheckReport?.detected_schema_types || [],
+    recommended_next_types: schemaCheckReport?.recommended_next_types || []
+  };
   
   // Check grounded fact rate
   const facts = units.filter(u => u.unit_type === 'fact');
   const groundedFacts = facts.filter(f => 
-    f.unit_grounding === 'schema' || 
-    f.unit_grounding === 'visible_text' || 
-    f.unit_grounding === 'metadata'
+    ['schema', 'schema_text', 'visible_text', 'metadata'].includes(f.unit_grounding)
   ).length;
   const groundedFactRate = facts.length > 0 ? groundedFacts / facts.length : 1.0;
   
@@ -1432,11 +1867,26 @@ function runQAGate(units, sections, docCleanText, boilerplateSignals) {
   }
   
   // Check schema coverage
-  const schemaUnits = units.filter(u => u.unit_grounding === 'schema').length;
+  const schemaUnits = units.filter(u => ['schema', 'schema_text'].includes(u.unit_grounding)).length;
   const schemaCoverageScore = units.length > 0 ? schemaUnits / units.length : 0;
   
   // Check hop graph density
-  const hopGraphDensity = units.length > 0 ? 0 : 0; // Will be calculated from edges
+  const hopGraphDensity = edges.length > 0 ? edges.length / Math.max(1, units.length) : 0;
+
+  let needsSchema = false;
+  let graphEdgesMissing = false;
+
+  if (schemaCoverageScore < 0.5) {
+    needsSchema = true;
+    errors.push(`schema_coverage_score too low: ${schemaCoverageScore.toFixed(2)} (required: >= 0.5)`);
+    fixSuggestions.push('needs schema coverage increase (>= 0.5)');
+  }
+
+  if (hopGraphDensity === 0) {
+    graphEdgesMissing = true;
+    errors.push('hop_graph_density is 0 (graph edges missing)');
+    fixSuggestions.push('Create schema relationships so hop_graph_density > 0');
+  }
   
   const qualityReport = {
     grounded_fact_rate: groundedFactRate,
@@ -1445,6 +1895,12 @@ function runQAGate(units, sections, docCleanText, boilerplateSignals) {
     atomicity_pass_rate: atomicityPassRate,
     schema_coverage_score: schemaCoverageScore,
     hop_graph_density: hopGraphDensity,
+    needs_schema: needsSchema,
+    graph_edges_missing: graphEdgesMissing,
+    missing_schema_checks: schemaChecks.missing_schema_checks,
+    present_schema_checks: schemaChecks.present_schema_checks,
+    detected_schema_types: schemaChecks.detected_schema_types,
+    recommended_next_types: schemaChecks.recommended_next_types,
     errors: errors.length > 0 ? errors : undefined,
     fix_suggestions: fixSuggestions.length > 0 ? fixSuggestions : undefined
   };
@@ -1492,7 +1948,7 @@ function computeQAMetrics(sections, units, docCleanText, boilerplateSignals) {
 }
 
 // Main content extraction with all upgrades
-function extractContentUniversal(html, baseUrl) {
+function extractContentUniversal(html, baseUrl, schemaHtmlOverride = null) {
   const docId = generateId(baseUrl, 'doc');
   const boilerplateSignals = { removed_fragments: [], rules_fired: [] };
   
@@ -1500,7 +1956,9 @@ function extractContentUniversal(html, baseUrl) {
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
   const title = titleMatch ? titleMatch[1].trim() : '';
   const meta = extractMetaTags(html);
-  const structured_data = extractJSONLD(html);
+  const schemaSourceHtml = schemaHtmlOverride || html;
+  const { structured_data, extraction_stats } = extractAllSchema(schemaSourceHtml);
+  const schemaCheckReport = analyzeSchemaCoverage(structured_data, extraction_stats);
   
   // Extract sections (retrieve-layer parents) with hard boilerplate scrubbing
   const sections = extractSections(html, baseUrl, docId, boilerplateSignals);
@@ -1519,6 +1977,8 @@ function extractContentUniversal(html, baseUrl) {
   // 2. Normalize schema facts (REQUIREMENT 5) with truth gating (REQUIREMENT 3)
   const { entities, units: schemaUnits } = normalizeSchemaFacts(structured_data, sections, docId, baseUrl, docCleanText, html);
   units.push(...schemaUnits);
+  const schemaGraphEdges = generateSchemaEdges(entities, baseUrl, baseUrl);
+  edges.push(...schemaGraphEdges);
   
   // 3. Extract FAQ units (atomized)
   const contentHash = crypto.createHash('sha256').update(docCleanText).digest('hex');
@@ -1585,13 +2045,14 @@ function extractContentUniversal(html, baseUrl) {
   const qa = computeQAMetrics(sections, units, docCleanText, boilerplateSignals);
   
   // 9. Run QA gate (REQUIREMENT 9: Citations Guarantee)
-  const qaGate = runQAGate(units, sections, docCleanText, boilerplateSignals);
+  const qaGate = runQAGate(units, sections, docCleanText, boilerplateSignals, schemaCheckReport, edges);
   
   return {
     doc_id: docId,
     title,
     meta,
     structured_data,
+    extraction_stats,
     doc_clean_text: docCleanText, // REQUIREMENT 1 & 2
     boilerplate_signals: boilerplateSignals, // REQUIREMENT 2
     entities, // REQUIREMENT 5
@@ -1602,7 +2063,8 @@ function extractContentUniversal(html, baseUrl) {
     units,
     edges,
     qa, // REQUIREMENT 11
-    qa_gate: qaGate // REQUIREMENT 9
+    qa_gate: qaGate, // REQUIREMENT 9
+    schema_check_report: schemaCheckReport,
   };
 }
 
@@ -1610,6 +2072,29 @@ function extractContentUniversal(html, baseUrl) {
 function computeContentHash(content) {
   const contentString = JSON.stringify(content);
   return crypto.createHash('sha256').update(contentString).digest('hex');
+}
+
+async function fetchPrerenderSnapshot(url) {
+  const prerenderEndpoint = process.env.PRENDER_SERVICE_URL;
+  if (!prerenderEndpoint) return null;
+  try {
+    const separator = prerenderEndpoint.includes('?') ? '&' : '?';
+    const prerenderUrl = `${prerenderEndpoint}${separator}url=${encodeURIComponent(url)}`;
+    const response = await fetch(prerenderUrl, {
+      headers: {
+        'User-Agent': 'Croutons-Ingestor/1.0',
+        'Accept': 'text/html'
+      }
+    });
+    if (!response.ok) {
+      console.warn(`[ingest] Prerender fetch failed for ${url}: ${response.status}`);
+      return null;
+    }
+    return await response.text();
+  } catch (error) {
+    console.warn('[ingest] Prerender fetch error:', error.message);
+    return null;
+  }
 }
 
 // POST /v1/ingest - Universal ingestion with all upgrades
@@ -1628,6 +2113,12 @@ export async function ingestUrl(req, res) {
     } catch {
       return res.status(400).json({ error: 'Invalid URL format' });
     }
+
+    const snapshotResult = await pool.query(
+      'SELECT html FROM html_snapshots WHERE domain = $1 AND source_url = $2',
+      [domain, canonicalUrl]
+    );
+    const previousHtml = snapshotResult.rows[0]?.html || null;
 
     // Fetch HTML snapshot
     const response = await fetch(canonicalUrl, {
@@ -1656,8 +2147,18 @@ export async function ingestUrl(req, res) {
         fetched_at = NOW()
     `, [domain, canonicalUrl, html]);
 
-    // Extract content with all upgrades
-    const extractedContent = extractContentUniversal(html, canonicalUrl);
+    // Extract content with all upgrades (allow schema-specific overrides)
+    let extractedContent = extractContentUniversal(html, canonicalUrl);
+    if (!extractedContent.structured_data || extractedContent.structured_data.length === 0) {
+      let fallbackSchemaHtml = previousHtml;
+      if (!fallbackSchemaHtml) {
+        fallbackSchemaHtml = await fetchPrerenderSnapshot(canonicalUrl);
+      }
+      if (fallbackSchemaHtml) {
+        console.log(`[ingest] Using fallback schema HTML for ${canonicalUrl}`);
+        extractedContent = extractContentUniversal(html, canonicalUrl, fallbackSchemaHtml);
+      }
+    }
     const contentHash = computeContentHash(extractedContent);
     
     // REQUIREMENT 9: Check QA gate - if failed, return ok: false
@@ -1689,7 +2190,9 @@ export async function ingestUrl(req, res) {
         vertical: extractedContent.vertical,
         views: extractedContent.views,
         qa: extractedContent.qa,
+        schema_check_report: extractedContent.schema_check_report,
         quality_report: extractedContent.qa_gate.quality_report,
+        extraction_stats: extractedContent.extraction_stats,
         fetched_at: new Date().toISOString()
       }
     });

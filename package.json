@@ -10,7 +10,6 @@
     "migrate": "node scripts/migrate.js",
     "verify": "bash scripts/verify-railway.sh",
     "test:chat": "node scripts/test-chat-endpoint.js",
-
     "schema:validate": "node tools/summon-schema.mjs validate",
     "schema:genval": "node tools/summon-schema.mjs generate_and_validate",
     "schema:url": "node tools/summon-schema.mjs url"
@@ -19,6 +18,7 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^4.19.2",
+    "node-html-parser": "^7.0.2",
     "pg": "^8.16.3",
     "redis": "^4.7.0"
   },
@@ -28,7 +28,6 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "devDependencies": {},
   "repository": {
     "type": "git",
     "url": "git+https://github.com/malwarescan/precogs-api.git"
