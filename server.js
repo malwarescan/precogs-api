@@ -69,6 +69,10 @@ import { initiateVerification, checkVerification } from "./src/routes/verify.js"
 app.post('/v1/verify/initiate', initiateVerification);
 app.post('/v1/verify/check', checkVerification);
 
+// Ingestion routes
+import { ingestUrl } from "./src/routes/ingest.js";
+app.post('/v1/ingest', ingestUrl);
+
 // Bearer token authentication middleware (optional, enabled via API_KEY env var)
 function requireAuth(req, res, next) {
   const apiKey = process.env.API_KEY;
