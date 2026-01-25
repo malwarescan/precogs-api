@@ -5,6 +5,7 @@
   "description": "Express API service for Precogs domain oracles.",
   "main": "server.js",
   "scripts": {
+    "prestart": "node scripts/migrate.js",
     "start": "node server.js",
     "migrate": "node scripts/migrate.js",
     "verify": "bash scripts/verify-railway.sh",
