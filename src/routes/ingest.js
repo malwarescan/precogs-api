@@ -2095,6 +2095,132 @@ function computeContentHash(content) {
   return crypto.createHash('sha256').update(contentString).digest('hex');
 }
 
+// Derive path from source URL (canonical, deterministic)
+function derivePath(sourceUrl) {
+  try {
+    const url = new URL(sourceUrl);
+    let path = url.pathname;
+    
+    // Remove leading/trailing slashes
+    path = path.replace(/^\/+|\/+$/g, '');
+    
+    // Empty path becomes 'index'
+    if (!path) {
+      path = 'index';
+    }
+    
+    return path;
+  } catch (error) {
+    console.error('Path derivation error:', error);
+    return 'index';
+  }
+}
+
+// Generate markdown from extracted content
+function generateMarkdown(extractedContent, sourceUrl, contentHash) {
+  const title = extractedContent.title || '';
+  const generatedAt = new Date().toISOString();
+  const domain = new URL(sourceUrl).hostname;
+  
+  // Build frontmatter
+  const frontmatter = [
+    '---',
+    `title: "${title.replace(/"/g, '\\"')}"`,
+    `source_url: "${sourceUrl}"`,
+    `source_domain: "${domain}"`,
+    `generated_by: "croutons.ai"`,
+    `generated_at: "${generatedAt}"`,
+    `content_hash: "${contentHash}"`,
+    '---',
+    ''
+  ].join('\n');
+
+  // Build markdown content from sections and units
+  let markdownContent = '';
+  
+  // Add main title
+  if (title) {
+    markdownContent += `# ${title}\n\n`;
+  }
+
+  // Add sections with their content
+  if (extractedContent.sections && extractedContent.sections.length > 0) {
+    for (const section of extractedContent.sections) {
+      if (section.heading) {
+        const level = section.heading_level || 2;
+        const prefix = '#'.repeat(level);
+        markdownContent += `${prefix} ${section.heading}\n\n`;
+      }
+      
+      if (section.text) {
+        markdownContent += `${section.text}\n\n`;
+      }
+    }
+  }
+
+  // Add units (facts, definitions, claims, FAQs)
+  if (extractedContent.units && extractedContent.units.length > 0) {
+    for (const unit of extractedContent.units) {
+      const unitType = unit.unit_type || 'claim';
+      const unitText = unit.clean_text || unit.text || '';
+      
+      if (unitText) {
+        // Add unit type as a subheading if it's a definition or FAQ
+        if (unitType === 'definition' || unitType === 'faq_a') {
+          markdownContent += `## ${unitType === 'definition' ? 'Definition' : 'FAQ'}\n\n`;
+        }
+        markdownContent += `${unitText}\n\n`;
+      }
+    }
+  }
+
+  // Fallback to doc_clean_text if no structured content
+  if (!markdownContent.trim() && extractedContent.doc_clean_text) {
+    markdownContent = extractedContent.doc_clean_text;
+  }
+
+  return frontmatter + markdownContent;
+}
+
+// Generate and store markdown in markdown_versions table
+async function generateAndStoreMarkdown(domain, sourceUrl, extractedContent, contentHash) {
+  const path = derivePath(sourceUrl);
+  const markdownContent = generateMarkdown(extractedContent, sourceUrl, contentHash);
+  
+  // Hash the markdown content for content_hash
+  const markdownHash = crypto.createHash('sha256').update(markdownContent).digest('hex');
+  
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // 1) Deactivate prior active versions for (domain, path)
+    await client.query(`
+      UPDATE markdown_versions 
+      SET is_active = false 
+      WHERE domain = $1 AND path = $2 AND is_active = true
+    `, [domain, path]);
+    
+    // 2) Insert new version with is_active=true
+    await client.query(`
+      INSERT INTO markdown_versions (domain, path, content, content_hash, generated_at, is_active)
+      VALUES ($1, $2, $3, $4, NOW(), TRUE)
+      ON CONFLICT (domain, path, content_hash) 
+      DO UPDATE SET
+        is_active = TRUE,
+        updated_at = NOW()
+    `, [domain, path, markdownContent, markdownHash]);
+    
+    await client.query('COMMIT');
+    console.log(`[ingest] ✅ Markdown generated and stored for ${domain}/${path}`);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function fetchPrerenderSnapshot(url) {
   const prerenderEndpoint = process.env.PRENDER_SERVICE_URL;
   if (!prerenderEndpoint) return null;
@@ -2184,6 +2310,16 @@ export async function ingestUrl(req, res) {
     
     // REQUIREMENT 9: Check QA gate - if failed, return ok: false
     const ok = extractedContent.qa_gate.passed;
+
+    // Generate and store markdown if ingestion passed
+    if (ok) {
+      try {
+        await generateAndStoreMarkdown(domain, canonicalUrl, extractedContent, contentHash);
+      } catch (markdownError) {
+        // Log but don't fail ingestion if markdown generation fails
+        console.error('[ingest] Markdown generation error (non-fatal):', markdownError.message);
+      }
+    }
 
     res.json({
       ok,
