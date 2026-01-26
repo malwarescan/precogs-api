@@ -1806,7 +1806,7 @@ function detectVertical(schemas) {
 }
 
 // REQUIREMENT 9: Citations Guarantee QA gate
-function runQAGate(units, sections, docCleanText, boilerplateSignals, schemaCheckReport = {}, edges = []) {
+async function runQAGate(units, sections, docCleanText, boilerplateSignals, schemaCheckReport = {}, edges = [], domain = null) {
   const errors = [];
   const fixSuggestions = [];
   const schemaChecks = {
@@ -1815,6 +1815,27 @@ function runQAGate(units, sections, docCleanText, boilerplateSignals, schemaChec
     detected_schema_types: schemaCheckReport?.detected_schema_types || [],
     recommended_next_types: schemaCheckReport?.recommended_next_types || []
   };
+  
+  // Check if domain is verified (lower threshold for verified domains)
+  let isVerified = false;
+  let requiredSchemaCoverage = 0.5; // Default threshold
+  
+  if (domain) {
+    try {
+      const verifiedCheck = await pool.query(
+        'SELECT verified_at FROM verified_domains WHERE domain = $1',
+        [domain]
+      );
+      isVerified = verifiedCheck.rows.length > 0 && verifiedCheck.rows[0].verified_at !== null;
+      if (isVerified) {
+        requiredSchemaCoverage = 0.0; // Verified domains bypass schema coverage requirement
+        console.log(`[runQAGate] Verified domain ${domain} detected - lowering schema coverage threshold to ${requiredSchemaCoverage}`);
+      }
+    } catch (error) {
+      console.warn(`[runQAGate] Error checking verified_domains for ${domain}:`, error.message);
+      // Continue with default threshold if check fails
+    }
+  }
   
   // Check grounded fact rate
   const facts = units.filter(u => u.unit_type === 'fact');
@@ -1876,10 +1897,10 @@ function runQAGate(units, sections, docCleanText, boilerplateSignals, schemaChec
   let needsSchema = false;
   let graphEdgesMissing = false;
 
-  if (schemaCoverageScore < 0.5) {
+  if (schemaCoverageScore < requiredSchemaCoverage) {
     needsSchema = true;
-    errors.push(`schema_coverage_score too low: ${schemaCoverageScore.toFixed(2)} (required: >= 0.5)`);
-    fixSuggestions.push('needs schema coverage increase (>= 0.5)');
+    errors.push(`schema_coverage_score too low: ${schemaCoverageScore.toFixed(2)} (required: >= ${requiredSchemaCoverage.toFixed(1)})`);
+    fixSuggestions.push(`needs schema coverage increase (>= ${requiredSchemaCoverage.toFixed(1)})`);
   }
 
   if (hopGraphDensity === 0) {
@@ -1948,7 +1969,7 @@ function computeQAMetrics(sections, units, docCleanText, boilerplateSignals) {
 }
 
 // Main content extraction with all upgrades
-function extractContentUniversal(html, baseUrl, schemaHtmlOverride = null) {
+async function extractContentUniversal(html, baseUrl, schemaHtmlOverride = null, domain = null) {
   const docId = generateId(baseUrl, 'doc');
   const boilerplateSignals = { removed_fragments: [], rules_fired: [] };
   
@@ -2045,7 +2066,7 @@ function extractContentUniversal(html, baseUrl, schemaHtmlOverride = null) {
   const qa = computeQAMetrics(sections, units, docCleanText, boilerplateSignals);
   
   // 9. Run QA gate (REQUIREMENT 9: Citations Guarantee)
-  const qaGate = runQAGate(units, sections, docCleanText, boilerplateSignals, schemaCheckReport, edges);
+  const qaGate = await runQAGate(units, sections, docCleanText, boilerplateSignals, schemaCheckReport, edges, domain);
   
   return {
     doc_id: docId,
@@ -2148,7 +2169,7 @@ export async function ingestUrl(req, res) {
     `, [domain, canonicalUrl, html]);
 
     // Extract content with all upgrades (allow schema-specific overrides)
-    let extractedContent = extractContentUniversal(html, canonicalUrl);
+    let extractedContent = await extractContentUniversal(html, canonicalUrl, null, domain);
     if (!extractedContent.structured_data || extractedContent.structured_data.length === 0) {
       let fallbackSchemaHtml = previousHtml;
       if (!fallbackSchemaHtml) {
@@ -2156,7 +2177,7 @@ export async function ingestUrl(req, res) {
       }
       if (fallbackSchemaHtml) {
         console.log(`[ingest] Using fallback schema HTML for ${canonicalUrl}`);
-        extractedContent = extractContentUniversal(html, canonicalUrl, fallbackSchemaHtml);
+        extractedContent = await extractContentUniversal(html, canonicalUrl, fallbackSchemaHtml, domain);
       }
     }
     const contentHash = computeContentHash(extractedContent);
