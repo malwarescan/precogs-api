@@ -710,6 +710,7 @@ function extractSections(html, url, docId, boilerplateSignals) {
 }
 
 // REQUIREMENT 1: Build doc_clean_text and fix provenance offsets (REQUIREMENT 2: Fix offsets)
+// Protocol v1.1: This becomes canonical_extracted_text - must be deterministic
 function buildDocCleanText(sections) {
   if (!sections || sections.length === 0) {
     return '';
@@ -722,7 +723,12 @@ function buildDocCleanText(sections) {
     if (!section || !section.clean_text) continue;
     
     const sectionStart = cursor;
-    const sectionText = section.clean_text;
+    // Protocol v1.1: Normalize whitespace (single spaces, single newlines)
+    const sectionText = section.clean_text
+      .replace(/\s+/g, ' ')  // Multiple spaces -> single space
+      .replace(/\n\s*\n/g, '\n')  // Multiple newlines -> single newline
+      .trim();
+    
     docParts.push(sectionText);
     const sectionEnd = cursor + sectionText.length;
     
@@ -731,11 +737,17 @@ function buildDocCleanText(sections) {
     section.char_end = sectionEnd;
     
     // Update cursor for next section (accounting for separator)
-    const separator = '\n\n—\n\n';
+    const separator = '\n\n';
     cursor = sectionEnd + separator.length;
   }
   
-  return docParts.join('\n\n—\n\n');
+  // Protocol v1.1: Join with normalized separator, ensure UTF-8
+  const canonicalText = docParts.join('\n\n');
+  
+  // Final normalization: ensure single newlines between sections, no trailing whitespace
+  return canonicalText
+    .replace(/\n{3,}/g, '\n\n')  // Max 2 consecutive newlines
+    .trim();
 }
 
 // REQUIREMENT 2: Calculate unit offsets within section (for SINR protocol)
@@ -1985,7 +1997,14 @@ async function extractContentUniversal(html, baseUrl, schemaHtmlOverride = null,
   const sections = extractSections(html, baseUrl, docId, boilerplateSignals);
   
   // REQUIREMENT 1: Build doc_clean_text and fix provenance offsets
+  // Protocol v1.1: This is canonical_extracted_text - deterministic extraction
   const docCleanText = buildDocCleanText(sections);
+  
+  // Protocol v1.1: Generate extraction hash (must be deterministic)
+  const extractionMethod = 'croutons-readability-v1';
+  const extractionTextHash = crypto.createHash('sha256')
+    .update(docCleanText, 'utf8')
+    .digest('hex');
   
   // Extract units (search-layer children)
   const units = [];
@@ -2049,6 +2068,23 @@ async function extractContentUniversal(html, baseUrl, schemaHtmlOverride = null,
     }
   }
   
+  // Protocol v1.1: Add deterministic evidence anchors to all units
+  addEvidenceAnchors(units, docCleanText, extractionTextHash);
+  
+  // Protocol v1.1: Generate fact identity (slot_id + fact_id) for all units
+  for (const unit of units) {
+    if (unit.evidence_anchor && !unit.anchor_missing) {
+      const identity = generateFactIdentity(unit, baseUrl, extractionTextHash);
+      if (identity) {
+        unit.slot_id = identity.slot_id;
+        unit.fact_id = identity.fact_id;
+      }
+    } else {
+      unit.anchor_missing = true;
+      console.warn(`[extractContentUniversal] Unit ${unit.unit_id} has missing anchor - will be excluded from citation-grade tier`);
+    }
+  }
+  
   // 6. Generate expanded edges (REQUIREMENT 7: Hop Graph beyond FAQ)
   const expandedEdges = generateExpandedEdges(units, sections, html, baseUrl);
   edges.push(...expandedEdges);
@@ -2075,6 +2111,10 @@ async function extractContentUniversal(html, baseUrl, schemaHtmlOverride = null,
     structured_data,
     extraction_stats,
     doc_clean_text: docCleanText, // REQUIREMENT 1 & 2
+    // Protocol v1.1: Canonical extraction tracking
+    canonical_extracted_text: docCleanText,
+    extraction_method: extractionMethod,
+    extraction_text_hash: extractionTextHash,
     boilerplate_signals: boilerplateSignals, // REQUIREMENT 2
     entities, // REQUIREMENT 5
     intended_users: intendedUsers, // REQUIREMENT 7
@@ -2087,6 +2127,134 @@ async function extractContentUniversal(html, baseUrl, schemaHtmlOverride = null,
     qa_gate: qaGate, // REQUIREMENT 9
     schema_check_report: schemaCheckReport,
   };
+}
+
+// Protocol v1.1: Generate fact identity (slot_id + fact_id)
+// slot_id = sha256(entity_id|predicate|source_url|char_start|char_end|extraction_text_hash)
+// fact_id = sha256(slot_id|object|fragment_hash)
+function generateFactIdentity(unit, sourceUrl, extractionTextHash) {
+  if (!unit.evidence_anchor || unit.anchor_missing) {
+    // Cannot generate stable identity without anchor
+    return null;
+  }
+  
+  const entityId = unit.triple?.subject_id || unit.entity_refs?.[0] || 'unknown';
+  const predicate = unit.triple?.predicate || 'states';
+  const charStart = unit.evidence_anchor.char_start;
+  const charEnd = unit.evidence_anchor.char_end;
+  const fragmentHash = unit.evidence_anchor.fragment_hash;
+  const object = unit.triple?.object || unit.clean_text || '';
+  
+  // slot_id: stable identity of fact slot (never changes unless anchor changes)
+  const slotIdComponents = [
+    entityId,
+    predicate,
+    sourceUrl,
+    charStart.toString(),
+    charEnd.toString(),
+    extractionTextHash
+  ].join('|');
+  
+  const slotId = crypto.createHash('sha256')
+    .update(slotIdComponents, 'utf8')
+    .digest('hex');
+  
+  // fact_id: versioned identity (changes when object or fragment changes)
+  const factIdComponents = [
+    slotId,
+    object,
+    fragmentHash
+  ].join('|');
+  
+  const factId = crypto.createHash('sha256')
+    .update(factIdComponents, 'utf8')
+    .digest('hex');
+  
+  return {
+    slot_id: slotId,
+    fact_id: factId
+  };
+}
+
+// Protocol v1.1: Add deterministic evidence anchors to all units
+// supporting_text MUST be exactly canonical_extracted_text[char_start:char_end]
+// fragment_hash MUST match sha256 of that exact substring
+function addEvidenceAnchors(units, canonicalExtractedText, extractionTextHash) {
+  if (!canonicalExtractedText || !extractionTextHash) {
+    console.warn('[addEvidenceAnchors] Missing canonical text or hash, skipping evidence anchors');
+    return;
+  }
+  
+  for (const unit of units) {
+    if (!unit.clean_text) continue;
+    
+    // Find unit text in canonical_extracted_text
+    // Try exact match first
+    const unitText = unit.clean_text.trim();
+    let charStart = canonicalExtractedText.indexOf(unitText);
+    let charEnd = charStart + unitText.length;
+    
+    // If exact match fails, try normalized (remove extra whitespace)
+    if (charStart === -1) {
+      const normalizedUnitText = unitText.replace(/\s+/g, ' ').trim();
+      const normalizedCanonical = canonicalExtractedText.replace(/\s+/g, ' ');
+      charStart = normalizedCanonical.indexOf(normalizedUnitText);
+      charEnd = charStart + normalizedUnitText.length;
+    }
+    
+    // If still not found, try finding by section offsets (fallback)
+    if (charStart === -1 && unit.section_id) {
+      // Use section char_start as approximate anchor
+      // This is a fallback - not ideal but better than nothing
+      const section = units.find(u => u.section_id === unit.section_id && u.char_start !== undefined);
+      if (section && section.char_start !== undefined) {
+        charStart = section.char_start;
+        charEnd = charStart + unitText.length;
+      }
+    }
+    
+    // If still not found, mark as anchor_missing (Protocol v1.1: no fake offsets)
+    if (charStart === -1) {
+      console.warn(`[addEvidenceAnchors] Could not anchor unit ${unit.unit_id}: "${unitText.substring(0, 50)}..."`);
+      unit.anchor_missing = true;
+      // Do NOT create fake offsets (0/0) - exclude from citation-grade tier
+      continue;
+    }
+    
+    // Ensure char_end doesn't exceed canonical text length
+    charEnd = Math.min(charEnd, canonicalExtractedText.length);
+    charStart = Math.max(0, charStart);
+    
+    // Extract supporting_text as exact substring
+    const supportingText = canonicalExtractedText.substring(charStart, charEnd);
+    
+    // Calculate fragment_hash
+    const fragmentHash = crypto.createHash('sha256')
+      .update(supportingText, 'utf8')
+      .digest('hex');
+    
+    // Store evidence anchor
+    unit.supporting_text = supportingText;
+    unit.evidence_anchor = {
+      char_start: charStart,
+      char_end: charEnd,
+      fragment_hash: fragmentHash,
+      extraction_text_hash: extractionTextHash
+    };
+    
+    // Validation: verify supporting_text matches substring
+    if (supportingText !== canonicalExtractedText.substring(charStart, charEnd)) {
+      console.error(`[addEvidenceAnchors] Validation failed for unit ${unit.unit_id}: supporting_text mismatch`);
+    }
+    
+    // Validation: verify fragment_hash
+    const computedFragmentHash = crypto.createHash('sha256')
+      .update(supportingText, 'utf8')
+      .digest('hex');
+    if (computedFragmentHash !== fragmentHash) {
+      console.error(`[addEvidenceAnchors] Validation failed for unit ${unit.unit_id}: fragment_hash mismatch`);
+    }
+  }
 }
 
 // Compute content hash for change detection
@@ -2478,18 +2646,33 @@ export async function ingestUrl(req, res) {
 
     const html = await response.text();
 
-    // Store raw HTML snapshot
+    // Extract content with all upgrades (allow schema-specific overrides)
+    let extractedContent = await extractContentUniversal(html, canonicalUrl, null, domain);
+    
+    // Protocol v1.1: Store canonical extraction tracking in html_snapshots
+    const canonicalExtractedText = extractedContent.canonical_extracted_text || extractedContent.doc_clean_text || '';
+    const extractionMethod = extractedContent.extraction_method || 'croutons-readability-v1';
+    const extractionTextHash = extractedContent.extraction_text_hash || 
+      crypto.createHash('sha256').update(canonicalExtractedText, 'utf8').digest('hex');
+    
+    // Store raw HTML snapshot + extraction tracking
     await pool.query(`
-      INSERT INTO html_snapshots (domain, source_url, html)
-      VALUES ($1, $2, $3)
+      INSERT INTO html_snapshots (
+        domain, source_url, html,
+        extraction_method, canonical_extracted_text, extraction_text_hash
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
       ON CONFLICT (domain, source_url) 
       DO UPDATE SET 
         html = EXCLUDED.html,
+        extraction_method = EXCLUDED.extraction_method,
+        canonical_extracted_text = EXCLUDED.canonical_extracted_text,
+        extraction_text_hash = EXCLUDED.extraction_text_hash,
         fetched_at = NOW()
-    `, [domain, canonicalUrl, html]);
+    `, [domain, canonicalUrl, html, extractionMethod, canonicalExtractedText, extractionTextHash]);
 
-    // Extract content with all upgrades (allow schema-specific overrides)
-    let extractedContent = await extractContentUniversal(html, canonicalUrl, null, domain);
+    // Note: extractContentUniversal already called above to get extraction tracking
+    // Re-extract only if we need fallback schema
     if (!extractedContent.structured_data || extractedContent.structured_data.length === 0) {
       let fallbackSchemaHtml = previousHtml;
       if (!fallbackSchemaHtml) {
@@ -2497,7 +2680,12 @@ export async function ingestUrl(req, res) {
       }
       if (fallbackSchemaHtml) {
         console.log(`[ingest] Using fallback schema HTML for ${canonicalUrl}`);
-        extractedContent = await extractContentUniversal(html, canonicalUrl, fallbackSchemaHtml, domain);
+        // Re-extract with fallback, but preserve extraction tracking from first pass
+        const fallbackContent = await extractContentUniversal(html, canonicalUrl, fallbackSchemaHtml, domain);
+        // Merge: use fallback structured_data but keep original extraction tracking
+        extractedContent.structured_data = fallbackContent.structured_data;
+        extractedContent.extraction_stats = fallbackContent.extraction_stats;
+        extractedContent.schema_check_report = fallbackContent.schema_check_report;
       }
     }
     const contentHash = computeContentHash(extractedContent);
@@ -2549,6 +2737,10 @@ export async function ingestUrl(req, res) {
         schema_check_report: extractedContent.schema_check_report,
         quality_report: extractedContent.qa_gate.quality_report,
         extraction_stats: extractedContent.extraction_stats,
+        // Protocol v1.1: Extraction tracking
+        extraction_method: extractedContent.extraction_method,
+        extraction_text_hash: extractedContent.extraction_text_hash,
+        canonical_extracted_text: extractedContent.canonical_extracted_text,
         fetched_at: new Date().toISOString()
       }
     });

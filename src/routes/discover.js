@@ -131,10 +131,11 @@ export async function discoverPage(req, res) {
 
     console.log(`[discover] Domain verified via ${verification.method}`);
 
-    // Step 2: Fetch page
+    // Step 2: Fetch page (store response for Link header check)
     let html;
+    let response;
     try {
-      const response = await fetch(page, {
+      response = await fetch(page, {
         headers: { 'User-Agent': 'Croutons-Discovery/1.0' },
         signal: AbortSignal.timeout(10000)
       });
@@ -155,7 +156,7 @@ export async function discoverPage(req, res) {
       });
     }
 
-    // Step 3: Confirm <link rel="alternate" type="text/markdown"> exists
+    // Step 3: Confirm <link rel="alternate" type="text/markdown"> exists (HTML)
     const alternateLink = extractAlternateLink(html);
     if (!alternateLink) {
       return res.status(400).json({
@@ -163,6 +164,32 @@ export async function discoverPage(req, res) {
         page,
         instructions: 'Add <link rel="alternate" type="text/markdown" href="..."> to <head>'
       });
+    }
+
+    // Step 3b: Check HTTP Link header (optional but recommended)
+    let httpLinkHeader = null;
+    const linkHeader = response.headers.get('Link');
+    if (linkHeader) {
+      // Parse Link header: <url>; rel="alternate"; type="text/markdown"
+      const linkMatches = linkHeader.match(/<([^>]+)>;\s*rel="alternate";\s*type="text\/markdown"/i);
+      if (linkMatches) {
+        httpLinkHeader = linkMatches[1];
+      }
+    }
+
+    // Determine discovery method
+    let discoveryMethod = 'html_link';
+    if (httpLinkHeader && alternateLink.href) {
+      // Normalize both for comparison
+      const htmlNormalized = normalizeUrl(alternateLink.href);
+      const httpNormalized = normalizeUrl(httpLinkHeader);
+      if (htmlNormalized === httpNormalized) {
+        discoveryMethod = 'both';
+      } else {
+        discoveryMethod = 'html_link'; // HTML takes precedence
+      }
+    } else if (httpLinkHeader) {
+      discoveryMethod = 'http_link';
     }
 
     // Step 4: Validate alternate URL if provided
@@ -176,7 +203,8 @@ export async function discoverPage(req, res) {
       }
     }
 
-    console.log(`[discover] Alternate link confirmed: ${alternateLink.href}`);
+    const discoveredMirrorUrl = alternateLink.href || httpLinkHeader;
+    console.log(`[discover] Alternate link confirmed: ${discoveredMirrorUrl} (method: ${discoveryMethod})`);
 
     // Step 5: Trigger ingestion (extract atomic Croutons)
     // Call internal ingestion via HTTP (simplest approach)
@@ -217,17 +245,31 @@ export async function discoverPage(req, res) {
       });
     }
 
-    // Step 6: Store discovery record
+    // Step 6: Store discovery record with proof (Protocol v1.1)
     const path = new URL(page).pathname.replace(/^\/+|\/+$/g, '') || 'index';
     await pool.query(`
-      INSERT INTO discovered_pages (domain, page_url, alternate_href, discovered_at, ingestion_id)
-      VALUES ($1, $2, $3, NOW(), $4)
+      INSERT INTO discovered_pages (
+        domain, page_url, alternate_href, 
+        discovered_mirror_url, discovery_method, discovery_checked_at,
+        discovered_at, ingestion_id
+      )
+      VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), $6)
       ON CONFLICT (domain, page_url) 
       DO UPDATE SET 
         alternate_href = EXCLUDED.alternate_href,
+        discovered_mirror_url = EXCLUDED.discovered_mirror_url,
+        discovery_method = EXCLUDED.discovery_method,
+        discovery_checked_at = NOW(),
         discovered_at = NOW(),
         ingestion_id = EXCLUDED.ingestion_id
-    `, [domain, page, alternateLink.href, ingestResult.data?.doc_id || null]);
+    `, [
+      domain, 
+      page, 
+      alternateLink.href, 
+      discoveredMirrorUrl,
+      discoveryMethod,
+      ingestResult.data?.doc_id || null
+    ]);
 
     // Step 7: Return success
     res.json({
@@ -242,7 +284,12 @@ export async function discoverPage(req, res) {
         schema_coverage: ingestResult.data?.quality_report?.schema_coverage_score,
         hop_density: ingestResult.data?.quality_report?.hop_graph_density
       },
-      markdown_url: alternateLink.href,
+      discovery: {
+        mirror_url: discoveredMirrorUrl,
+        method: discoveryMethod,
+        checked_at: new Date().toISOString()
+      },
+      markdown_url: discoveredMirrorUrl,
       message: 'Page discovered and ingested. Atomic Croutons extracted and stored in graph.'
     });
 

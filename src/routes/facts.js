@@ -26,7 +26,7 @@ export async function getFactsStream(req, res) {
       return res.status(400).json({ error: 'Domain required' });
     }
     
-    // Query croutons for this domain
+    // Protocol v1.1: Query croutons with new fields
     const { rows } = await pool.query(
       `SELECT 
         crouton_id,
@@ -35,7 +35,14 @@ export async function getFactsStream(req, res) {
         triple,
         confidence,
         created_at,
-        verified_at
+        verified_at,
+        slot_id,
+        fact_id,
+        previous_fact_id,
+        revision,
+        supporting_text,
+        evidence_anchor,
+        extraction_text_hash
       FROM croutons
       WHERE source_url LIKE $1
       ORDER BY created_at DESC
@@ -43,29 +50,48 @@ export async function getFactsStream(req, res) {
       [`%${domain}%`]
     );
     
-    // Set NDJSON headers
+    // Protocol v1.1: Set proper NDJSON headers
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=300');
     res.setHeader('Access-Control-Allow-Origin', '*');
     
+    // Generate ETag from first fact's extraction_text_hash (if available)
+    if (rows.length > 0 && rows[0].extraction_text_hash) {
+      res.setHeader('ETag', `"${rows[0].extraction_text_hash.substring(0, 16)}"`);
+    }
+    
     // Generate entity ID for this domain
     const baseEntityId = `https://${domain}/#org`;
     
-    // Stream facts
+    // Stream facts in v1.1 format
     for (const row of rows) {
       let fact;
+      
+      // Protocol v1.1: Use stored slot_id and fact_id if available
+      const hasV1Fields = row.slot_id && row.fact_id;
       
       // If we have a triple, use it
       if (row.triple && typeof row.triple === 'object') {
         const { subject, predicate, object } = row.triple;
         
         fact = {
-          fact_id: generateFactId(domain, row.source_url, subject, predicate, object),
+          // Protocol v1.1: Identity fields
+          slot_id: row.slot_id || null,
+          fact_id: row.fact_id || generateFactId(domain, row.source_url, subject, predicate, object),
+          revision: row.revision || 1,
+          previous_fact_id: row.previous_fact_id || null,
+          
+          // Core fact fields
           entity_id: subject || baseEntityId,
           predicate: predicate || 'states',
           object: object,
           source_url: row.source_url,
-          supporting_text: row.text || object,
+          
+          // Protocol v1.1: Evidence anchor
+          supporting_text: row.supporting_text || row.text || object,
+          evidence_anchor: row.evidence_anchor || null,
+          
+          // Metadata
           updated_at: row.verified_at || row.created_at,
           confidence: row.confidence,
           crouton_id: row.crouton_id
@@ -73,12 +99,23 @@ export async function getFactsStream(req, res) {
       } else {
         // Fall back to text-based fact
         fact = {
-          fact_id: generateFactId(domain, row.source_url, baseEntityId, 'states', row.text),
+          // Protocol v1.1: Identity fields
+          slot_id: row.slot_id || null,
+          fact_id: row.fact_id || generateFactId(domain, row.source_url, baseEntityId, 'states', row.text),
+          revision: row.revision || 1,
+          previous_fact_id: row.previous_fact_id || null,
+          
+          // Core fact fields
           entity_id: baseEntityId,
           predicate: 'states',
           object: row.text,
           source_url: row.source_url,
-          supporting_text: row.text,
+          
+          // Protocol v1.1: Evidence anchor
+          supporting_text: row.supporting_text || row.text,
+          evidence_anchor: row.evidence_anchor || null,
+          
+          // Metadata
           updated_at: row.verified_at || row.created_at,
           confidence: row.confidence,
           crouton_id: row.crouton_id
@@ -105,7 +142,7 @@ export async function getAllFactsStream(req, res) {
   try {
     const limit = parseInt(req.query.limit) || 1000;
     
-    // Query croutons
+    // Protocol v1.1: Query croutons with new fields
     const { rows } = await pool.query(
       `SELECT 
         crouton_id,
@@ -114,19 +151,26 @@ export async function getAllFactsStream(req, res) {
         triple,
         confidence,
         created_at,
-        verified_at
+        verified_at,
+        slot_id,
+        fact_id,
+        previous_fact_id,
+        revision,
+        supporting_text,
+        evidence_anchor,
+        extraction_text_hash
       FROM croutons
       ORDER BY created_at DESC
       LIMIT $1`,
       [limit]
     );
     
-    // Set NDJSON headers
+    // Protocol v1.1: Set proper NDJSON headers
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=300');
     res.setHeader('Access-Control-Allow-Origin', '*');
     
-    // Stream facts
+    // Stream facts in v1.1 format
     for (const row of rows) {
       try {
         const sourceUrl = new URL(row.source_url);
@@ -139,24 +183,46 @@ export async function getAllFactsStream(req, res) {
           const { subject, predicate, object } = row.triple;
           
           fact = {
-            fact_id: generateFactId(domain, row.source_url, subject, predicate, object),
+            // Protocol v1.1: Identity fields
+            slot_id: row.slot_id || null,
+            fact_id: row.fact_id || generateFactId(domain, row.source_url, subject, predicate, object),
+            revision: row.revision || 1,
+            previous_fact_id: row.previous_fact_id || null,
+            
+            // Core fact fields
             entity_id: subject || baseEntityId,
             predicate: predicate || 'states',
             object: object,
             source_url: row.source_url,
-            supporting_text: row.text || object,
+            
+            // Protocol v1.1: Evidence anchor
+            supporting_text: row.supporting_text || row.text || object,
+            evidence_anchor: row.evidence_anchor || null,
+            
+            // Metadata
             updated_at: row.verified_at || row.created_at,
             confidence: row.confidence,
             crouton_id: row.crouton_id
           };
         } else {
           fact = {
-            fact_id: generateFactId(domain, row.source_url, baseEntityId, 'states', row.text),
+            // Protocol v1.1: Identity fields
+            slot_id: row.slot_id || null,
+            fact_id: row.fact_id || generateFactId(domain, row.source_url, baseEntityId, 'states', row.text),
+            revision: row.revision || 1,
+            previous_fact_id: row.previous_fact_id || null,
+            
+            // Core fact fields
             entity_id: baseEntityId,
             predicate: 'states',
             object: row.text,
             source_url: row.source_url,
-            supporting_text: row.text,
+            
+            // Protocol v1.1: Evidence anchor
+            supporting_text: row.supporting_text || row.text,
+            evidence_anchor: row.evidence_anchor || null,
+            
+            // Metadata
             updated_at: row.verified_at || row.created_at,
             confidence: row.confidence,
             crouton_id: row.crouton_id
