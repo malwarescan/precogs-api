@@ -82,6 +82,15 @@ import { runScanner } from "./src/routes/scanner.js";
 app.get('/v1/scanner/run', runScanner);
 app.post('/v1/scanner/run', runScanner);
 
+// Facts stream endpoint (E1)
+import { getFactsStream, getAllFactsStream } from "./src/routes/facts.js";
+app.get('/v1/facts/:domain.ndjson', getFactsStream);
+app.get('/v1/facts.ndjson', getAllFactsStream);
+
+// Entity graph endpoint (C2)
+import { getEntityGraph } from "./src/routes/graph.js";
+app.get('/v1/graph/:domain.jsonld', getEntityGraph);
+
 // Bearer token authentication middleware (optional, enabled via API_KEY env var)
 function requireAuth(req, res, next) {
   const apiKey = process.env.API_KEY;
