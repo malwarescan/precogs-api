@@ -2121,8 +2121,17 @@ function generateMarkdown(extractedContent, sourceUrl, contentHash) {
   const title = extractedContent.title || '';
   const generatedAt = new Date().toISOString();
   const domain = new URL(sourceUrl).hostname;
+  const baseUrl = `https://${domain}`;
   
-  // Build frontmatter
+  // Generate stable entity IDs
+  const entityIds = {
+    org: `${baseUrl}/#org`,
+    website: `${baseUrl}/#website`,
+    page: `${baseUrl}/#webpage-${crypto.createHash('md5').update(sourceUrl).digest('hex').substring(0, 8)}`,
+    service: `${baseUrl}/#service-primary`
+  };
+  
+  // Build frontmatter with language detection
   const frontmatter = [
     '---',
     `title: "${title.replace(/"/g, '\\"')}"`,
@@ -2131,55 +2140,226 @@ function generateMarkdown(extractedContent, sourceUrl, contentHash) {
     `generated_by: "croutons.ai"`,
     `generated_at: "${generatedAt}"`,
     `content_hash: "${contentHash}"`,
+    `language: "${extractedContent.language || 'en'}"`,
+    'entities:',
+    `  org_id: "${entityIds.org}"`,
+    `  website_id: "${entityIds.website}"`,
+    `  page_id: "${entityIds.page}"`,
+    `  service_id: "${entityIds.service}"`,
     '---',
     ''
   ].join('\n');
 
-  // Build markdown content from sections and units
-  let markdownContent = '';
+  // Start markdown content
+  let markdown = '';
   
-  // Add main title
+  // Add title
   if (title) {
-    markdownContent += `# ${title}\n\n`;
+    markdown += `# ${title}\n\n`;
   }
 
-  // Add sections with their content
-  if (extractedContent.sections && extractedContent.sections.length > 0) {
+  // === ENTITY REGISTRY ===
+  markdown += '## Entities\n\n';
+  
+  // Collect and deduplicate triples
+  const tripleSet = new Set();
+  const addTriple = (subject, predicate, object) => {
+    if (!object || object === '') return;
+    const normalized = `${subject} | ${predicate} | ${String(object).trim()}`;
+    tripleSet.add(normalized);
+  };
+
+  // Extract entities from structured data
+  const structuredData = extractedContent.structured_data || [];
+  const entities = {};
+  
+  for (const item of structuredData) {
+    const type = normalizeSchemaType(item['@type']);
+    let entityId = null;
+    
+    // Assign appropriate entity ID based on type
+    if (type === 'Organization') {
+      entityId = entityIds.org;
+      entities.org = item;
+    } else if (type === 'WebSite') {
+      entityId = entityIds.website;
+      entities.website = item;
+    } else if (type === 'WebPage') {
+      entityId = entityIds.page;
+      entities.page = item;
+    } else if (type === 'Service' || type === 'Product') {
+      entityId = entityIds.service;
+      entities.service = item;
+    } else {
+      // Generic entity with generated ID
+      entityId = `${baseUrl}/#${type.toLowerCase()}-${crypto.createHash('md5').update(JSON.stringify(item)).digest('hex').substring(0, 8)}`;
+    }
+    
+    // Add type triple
+    addTriple(entityId, 'type', type);
+    
+    // Extract properties as triples
+    for (const [prop, value] of Object.entries(item)) {
+      if (prop.startsWith('@')) continue; // Skip JSON-LD keywords
+      
+      if (Array.isArray(value)) {
+        // Handle arrays (e.g., sameAs links)
+        for (const val of value) {
+          if (typeof val === 'object' && val !== null) {
+            // Nested object - extract nested properties
+            if (val['@type']) {
+              addTriple(entityId, prop, `${val['@type']}: ${val.name || JSON.stringify(val)}`);
+            }
+          } else {
+            addTriple(entityId, prop, val);
+          }
+        }
+      } else if (typeof value === 'object' && value !== null) {
+        // Nested object
+        if (value['@type']) {
+          addTriple(entityId, prop, `${value['@type']}: ${value.name || JSON.stringify(value)}`);
+        } else if (value.name) {
+          addTriple(entityId, prop, value.name);
+        }
+      } else {
+        // Simple value
+        addTriple(entityId, prop, value);
+      }
+    }
+  }
+  
+  // Write entity triples (sorted for determinism)
+  const sortedTriples = Array.from(tripleSet).sort();
+  for (const triple of sortedTriples) {
+    markdown += `${triple}\n`;
+  }
+  markdown += '\n';
+
+  // === DEFINITIONS ===
+  const definitions = (extractedContent.units || []).filter(u => u.unit_type === 'definition');
+  if (definitions.length > 0) {
+    markdown += '## Core Definitions (Atomic)\n\n';
+    const defSet = new Set();
+    
+    for (const def of definitions) {
+      const text = (def.clean_text || def.text || '').trim();
+      if (!text) continue;
+      
+      // Parse "TERM: definition" format
+      const colonIndex = text.indexOf(':');
+      if (colonIndex > 0 && colonIndex < 50) {
+        const term = text.substring(0, colonIndex).trim();
+        const definition = text.substring(colonIndex + 1).trim();
+        defSet.add(`definition | ${term} | ${definition}`);
+      } else {
+        defSet.add(`definition | ${text.split(/[:.]/)[0].trim()} | ${text}`);
+      }
+    }
+    
+    for (const def of Array.from(defSet).sort()) {
+      markdown += `${def}\n`;
+    }
+    markdown += '\n';
+  }
+
+  // === ATOMIC FACTS ===
+  const facts = (extractedContent.units || []).filter(u => 
+    u.unit_type === 'fact' || u.unit_type === 'claim'
+  );
+  
+  if (facts.length > 0) {
+    markdown += '## Facts (Atomic)\n\n';
+    const factSet = new Set();
+    
+    for (const fact of facts) {
+      const text = (fact.clean_text || fact.text || '').trim();
+      if (!text || text.length < 10) continue;
+      
+      // Split long sentences into atomic units
+      const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+      for (let sentence of sentences) {
+        sentence = sentence.trim();
+        if (sentence.length < 10) continue;
+        
+        // Add evidence pointer if available
+        const evidence = fact.evidence_heading_path || fact.section_heading || '';
+        if (evidence) {
+          factSet.add(`${entityIds.page} | states | ${sentence} [evidence: ${evidence}]`);
+        } else {
+          factSet.add(`${entityIds.page} | states | ${sentence}`);
+        }
+      }
+    }
+    
+    for (const fact of Array.from(factSet).sort()) {
+      markdown += `${fact}\n`;
+    }
+    markdown += '\n';
+  }
+
+  // === FAQ ===
+  const faqQuestions = (extractedContent.units || []).filter(u => u.unit_type === 'faq_q');
+  const faqAnswers = (extractedContent.units || []).filter(u => u.unit_type === 'faq_a');
+  
+  if (faqQuestions.length > 0 || faqAnswers.length > 0) {
+    markdown += '## FAQ\n\n';
+    
+    // Try to pair questions with answers
+    for (let i = 0; i < faqQuestions.length; i++) {
+      const question = (faqQuestions[i].clean_text || faqQuestions[i].text || '').trim();
+      if (!question) continue;
+      
+      markdown += `### Q: ${question}\n\n`;
+      
+      // Find corresponding answer (next answer after this question)
+      if (i < faqAnswers.length) {
+        const answer = (faqAnswers[i].clean_text || faqAnswers[i].text || '').trim();
+        if (answer) {
+          // Split answer into bullet points if it contains sentences
+          const sentences = answer.split(/[.!?]+/).filter(s => s.trim().length > 10);
+          if (sentences.length > 1) {
+            markdown += 'A:\n';
+            for (const sentence of sentences) {
+              markdown += `  • ${sentence.trim()}\n`;
+            }
+          } else {
+            markdown += `A: ${answer}\n`;
+          }
+        }
+      }
+      markdown += '\n';
+    }
+  }
+
+  // === SECTIONS (if no structured data) ===
+  if (sortedTriples.length === 0 && extractedContent.sections && extractedContent.sections.length > 0) {
+    markdown += '## Content\n\n';
     for (const section of extractedContent.sections) {
       if (section.heading) {
-        const level = section.heading_level || 2;
-        const prefix = '#'.repeat(level);
-        markdownContent += `${prefix} ${section.heading}\n\n`;
+        markdown += `### ${section.heading}\n\n`;
       }
-      
       if (section.text) {
-        markdownContent += `${section.text}\n\n`;
-      }
-    }
-  }
-
-  // Add units (facts, definitions, claims, FAQs)
-  if (extractedContent.units && extractedContent.units.length > 0) {
-    for (const unit of extractedContent.units) {
-      const unitType = unit.unit_type || 'claim';
-      const unitText = unit.clean_text || unit.text || '';
-      
-      if (unitText) {
-        // Add unit type as a subheading if it's a definition or FAQ
-        if (unitType === 'definition' || unitType === 'faq_a') {
-          markdownContent += `## ${unitType === 'definition' ? 'Definition' : 'FAQ'}\n\n`;
+        // Split into atomic sentences
+        const sentences = section.text.split(/[.!?]+/).filter(s => s.trim().length > 10);
+        for (const sentence of sentences) {
+          markdown += `${entityIds.page} | contains | ${sentence.trim()}\n`;
         }
-        markdownContent += `${unitText}\n\n`;
+        markdown += '\n';
       }
     }
   }
 
-  // Fallback to doc_clean_text if no structured content
-  if (!markdownContent.trim() && extractedContent.doc_clean_text) {
-    markdownContent = extractedContent.doc_clean_text;
+  // Fallback to doc_clean_text if no structured content at all
+  if (markdown.trim() === '## Entities\n' && extractedContent.doc_clean_text) {
+    markdown += '## Content\n\n';
+    const sentences = extractedContent.doc_clean_text.split(/[.!?]+/).filter(s => s.trim().length > 10);
+    for (const sentence of sentences.slice(0, 50)) { // Limit to 50 sentences for fallback
+      markdown += `${entityIds.page} | contains | ${sentence.trim()}\n`;
+    }
+    markdown += '\n';
   }
 
-  return frontmatter + markdownContent;
+  return frontmatter + markdown;
 }
 
 // Generate and store markdown in markdown_versions table
