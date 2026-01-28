@@ -84,7 +84,7 @@ export async function getStatus(req, res) {
         COUNT(*) as count,
         COUNT(CASE WHEN evidence_type = 'text_extraction' THEN 1 END) as text_extraction_count,
         COUNT(CASE WHEN evidence_type = 'structured_data' THEN 1 END) as structured_data_count,
-        COUNT(CASE WHEN evidence_type = 'text_extraction' AND evidence_anchor IS NOT NULL AND anchor_missing = false THEN 1 END) as anchored_text_count,
+        COUNT(CASE WHEN evidence_type = 'text_extraction' AND evidence_anchor IS NOT NULL AND COALESCE(anchor_missing, false) = false THEN 1 END) as anchored_text_count,
         COUNT(CASE WHEN slot_id IS NOT NULL AND fact_id IS NOT NULL THEN 1 END) as v11_count
       FROM public.croutons
       WHERE domain = $1`,

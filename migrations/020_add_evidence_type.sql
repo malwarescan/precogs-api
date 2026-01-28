@@ -14,6 +14,10 @@ CREATE INDEX IF NOT EXISTS idx_croutons_evidence_type
 ALTER TABLE public.croutons 
   ADD COLUMN IF NOT EXISTS source_path TEXT;
 
+-- Add anchor_missing flag
+ALTER TABLE public.croutons 
+  ADD COLUMN IF NOT EXISTS anchor_missing BOOLEAN DEFAULT false;
+
 -- Update existing rows to categorize them
 -- If has evidence_anchor and supporting_text is substantial, likely text_extraction
 UPDATE public.croutons
