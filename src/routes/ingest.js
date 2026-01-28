@@ -2709,7 +2709,9 @@ export async function ingestUrl(req, res) {
     }
 
     // Protocol v1.1: Store all units in croutons table for facts stream
+    let croutonsStorageStatus = { attempted: false, success: false, error: null, count: 0 };
     if (extractedContent.units && extractedContent.units.length > 0) {
+      croutonsStorageStatus.attempted = true;
       try {
         console.log(`[ingest] Storing ${extractedContent.units.length} units to croutons table...`);
         
@@ -2759,12 +2761,16 @@ export async function ingestUrl(req, res) {
             extractedContent.extraction_text_hash || null,
             unit.confidence || 0.5
           ]);
+          croutonsStorageStatus.count++;
         }
         
+        croutonsStorageStatus.success = true;
         console.log(`[ingest] ✅ Stored ${extractedContent.units.length} units to croutons table`);
       } catch (croutonsError) {
         // Log but don't fail ingestion if croutons storage fails
+        croutonsStorageStatus.error = croutonsError.message;
         console.error('[ingest] Croutons storage error (non-fatal):', croutonsError.message);
+        console.error('[ingest] Croutons storage stack:', croutonsError.stack);
       }
     }
 
@@ -2801,7 +2807,9 @@ export async function ingestUrl(req, res) {
         extraction_method: extractedContent.extraction_method,
         extraction_text_hash: extractedContent.extraction_text_hash,
         canonical_extracted_text: extractedContent.canonical_extracted_text,
-        fetched_at: new Date().toISOString()
+        fetched_at: new Date().toISOString(),
+        // Debug: croutons storage status
+        _debug_croutons_storage: croutonsStorageStatus
       }
     });
 
