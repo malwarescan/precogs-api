@@ -171,6 +171,39 @@ app.get("/debug/croutons-schema", async (_req, res) => {
   }
 });
 
+// Debug endpoint: list all domains in croutons table
+app.get("/debug/croutons-domains", async (_req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT domain, COUNT(*) as count 
+      FROM public.croutons 
+      GROUP BY domain 
+      ORDER BY count DESC 
+      LIMIT 50
+    `);
+    res.json({ ok: true, domains: result.rows });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Debug endpoint: query by specific crouton_id
+app.get("/debug/crouton/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
+      SELECT * FROM public.croutons WHERE crouton_id = $1
+    `, [id]);
+    res.json({
+      ok: true,
+      found: result.rows.length > 0,
+      row: result.rows[0] || null
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 // Debug endpoint: test INSERT and verify it persists
 app.get("/debug/test-insert", async (_req, res) => {
   try {
