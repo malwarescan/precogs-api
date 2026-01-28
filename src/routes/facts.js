@@ -44,10 +44,10 @@ export async function getFactsStream(req, res) {
         evidence_anchor,
         extraction_text_hash
       FROM croutons
-      WHERE source_url LIKE $1
+      WHERE domain = $1
       ORDER BY created_at DESC
       LIMIT 1000`,
-      [`%${domain}%`]
+      [domain]
     );
     
     // Protocol v1.1: Set proper NDJSON headers
