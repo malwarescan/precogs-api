@@ -51,7 +51,8 @@ const pool = new Pool({
       "017_create_croutons_table.sql",
       "018_fix_croutons_schema.sql",
       "019_fix_croutons_uniqueness.sql",
-      "020_add_evidence_type.sql"
+      "020_add_evidence_type.sql",
+      "021_add_anchor_missing.sql"
     ];
 
     let appliedCount = 0;
