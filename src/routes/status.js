@@ -54,7 +54,7 @@ export async function getStatus(req, res) {
         protocol_version,
         markdown_version,
         COUNT(*) as count
-      FROM markdown_versions 
+      FROM public.markdown_versions 
       WHERE domain = $1 AND is_active = true
       GROUP BY protocol_version, markdown_version`,
       [domain]
@@ -69,7 +69,7 @@ export async function getStatus(req, res) {
       `SELECT COUNT(*) as count,
         COUNT(CASE WHEN slot_id IS NOT NULL AND fact_id IS NOT NULL THEN 1 END) as v11_count,
         COUNT(CASE WHEN evidence_anchor IS NOT NULL THEN 1 END) as anchored_count
-      FROM croutons
+      FROM public.croutons
       WHERE domain = $1`,
       [domain]
     );
@@ -84,7 +84,7 @@ export async function getStatus(req, res) {
     // For now, assume graph is non-empty if we have ingested pages
     const graphQuery = await pool.query(
       `SELECT COUNT(*) as count
-      FROM html_snapshots
+      FROM public.html_snapshots
       WHERE domain = $1`,
       [domain]
     );
@@ -113,7 +113,7 @@ export async function getStatus(req, res) {
     // 6. Extract extraction_method from html_snapshots
     const extractionQuery = await pool.query(
       `SELECT extraction_method
-      FROM html_snapshots
+      FROM public.html_snapshots
       WHERE domain = $1 AND extraction_method IS NOT NULL
       LIMIT 1`,
       [domain]

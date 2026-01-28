@@ -27,6 +27,7 @@ export async function getFactsStream(req, res) {
     }
     
     // Protocol v1.1: Query croutons with new fields
+    // BLOCKER FIX #2: Schema-qualify table name
     const { rows } = await pool.query(
       `SELECT 
         crouton_id,
@@ -43,7 +44,7 @@ export async function getFactsStream(req, res) {
         supporting_text,
         evidence_anchor,
         extraction_text_hash
-      FROM croutons
+      FROM public.croutons
       WHERE domain = $1
       ORDER BY created_at DESC
       LIMIT 1000`,

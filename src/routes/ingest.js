@@ -2734,60 +2734,55 @@ export async function ingestUrl(req, res) {
     }
 
     // Protocol v1.1: Store all units in croutons table for facts stream
+    // BLOCKER FIX: Track actual DB writes, not loop iterations
     let croutonsStorageStatus = { 
-      attempted: false, 
+      attempted: 0,
+      inserted: 0,
+      updated: 0,
+      skipped: 0,
+      invalid: 0,
       success: false, 
-      error: null, 
-      count: 0,
-      debug: {
-        hasUnits: !!extractedContent.units,
-        unitsLength: extractedContent.units ? extractedContent.units.length : null,
-        unitsType: typeof extractedContent.units,
-        isArray: Array.isArray(extractedContent.units),
-        firstUnitExists: extractedContent.units && extractedContent.units[0] ? true : false
-      }
+      error: null
     };
     if (extractedContent.units && extractedContent.units.length > 0) {
-      croutonsStorageStatus.attempted = true;
       try {
-        console.log(`[ingest] Storing ${extractedContent.units.length} units to croutons table...`);
+        console.log(`[ingest] Storing ${extractedContent.units.length} units to public.croutons table...`);
         
+        // BLOCKER FIX #3: Proper for...of with await (not forEach)
         for (const unit of extractedContent.units) {
-          // Use fact_id as crouton_id (both are deterministic)
-          // This ensures ON CONFLICT works correctly for re-ingests
-          const croutonId = unit.fact_id ? 
-            unit.fact_id.substring(0, 16) : 
-            crypto.createHash('sha256')
-              .update(`${domain}|${canonicalUrl}|${unit.text}`)
-              .digest('hex').substring(0, 16);
+          croutonsStorageStatus.attempted++;
+          // BLOCKER FIX #1: Skip units without v1.1 identity
+          if (!unit.slot_id || !unit.fact_id) {
+            croutonsStorageStatus.skipped++;
+            continue;
+          }
+          
+          // BLOCKER FIX #5: Enforce object non-null
+          const object = unit.triple?.object || unit.text;
+          if (!object || object === '') {
+            console.log(`[ingest] Skipping unit with null/empty object: slot_id=${unit.slot_id}`);
+            croutonsStorageStatus.invalid++;
+            continue;
+          }
+          
+          // Use fact_id as crouton_id (deterministic)
+          const croutonId = unit.fact_id.substring(0, 16);
           
           // Extract entity_id from triple or use default
           const entityId = unit.triple?.subject || `https://${domain}/#org`;
           const predicate = unit.triple?.predicate || 'states';
-          const object = unit.triple?.object || unit.text;
           
-          // Debug: log first unit's v1.1 fields
-          if (croutonsStorageStatus.count === 0) {
-            console.log('[ingest] First unit v1.1 fields:', {
-              has_slot_id: !!unit.slot_id,
-              has_fact_id: !!unit.fact_id,
-              has_evidence_anchor: !!unit.evidence_anchor,
-              has_supporting_text: !!unit.supporting_text,
-              slot_id_sample: unit.slot_id ? unit.slot_id.substring(0, 16) : null,
-              extraction_text_hash_sample: extractedContent.extraction_text_hash ? extractedContent.extraction_text_hash.substring(0, 16) : null
-            });
-          }
+          // Build triple with non-null object
+          const triple = {
+            subject: entityId,
+            predicate: predicate,
+            object: object
+          };
           
-          // Skip units with missing v1.1 identity
-          if (!unit.slot_id || !unit.fact_id) {
-            console.log(`[ingest] Skipping unit without v1.1 identity`);
-            continue;
-          }
-          
-          // Simple INSERT with ON CONFLICT to handle re-ingests
-          // crouton_id is derived from fact_id, so it's deterministic
+          // BLOCKER FIX #2: Schema-qualify table name
+          // BLOCKER FIX #1: Use rowCount + xmax to track actual DB operations
           const insertResult = await pool.query(`
-            INSERT INTO croutons (
+            INSERT INTO public.croutons (
               crouton_id, domain, source_url, text, triple,
               slot_id, fact_id, previous_fact_id, revision,
               supporting_text, evidence_anchor, extraction_text_hash,
@@ -2796,22 +2791,22 @@ export async function ingestUrl(req, res) {
             ON CONFLICT (crouton_id) DO UPDATE SET
               text = EXCLUDED.text,
               triple = EXCLUDED.triple,
-              previous_fact_id = croutons.fact_id,
+              previous_fact_id = public.croutons.fact_id,
               fact_id = EXCLUDED.fact_id,
-              revision = croutons.revision + 1,
+              revision = public.croutons.revision + 1,
               supporting_text = EXCLUDED.supporting_text,
               evidence_anchor = EXCLUDED.evidence_anchor,
               extraction_text_hash = EXCLUDED.extraction_text_hash,
               confidence = EXCLUDED.confidence,
               verified_at = NOW(),
               updated_at = NOW()
-            RETURNING id, domain, crouton_id
+            RETURNING id, domain, crouton_id, (xmax = 0) as was_inserted
           `, [
             croutonId,
             domain,
             canonicalUrl,
             unit.text,
-            JSON.stringify(unit.triple || null),
+            JSON.stringify(triple),
             unit.slot_id,
             unit.fact_id,
             unit.previous_fact_id || null,
@@ -2822,20 +2817,50 @@ export async function ingestUrl(req, res) {
             unit.confidence || 0.5
           ]);
           
-          // Log first successful INSERT
-          if (croutonsStorageStatus.count === 0 && insertResult.rows[0]) {
-            console.log('[ingest] First INSERT result:', {
-              id: insertResult.rows[0].id,
-              domain: insertResult.rows[0].domain,
-              crouton_id: insertResult.rows[0].crouton_id
-            });
+          // BLOCKER FIX #1: Count actual DB writes (not loop iterations)
+          if (insertResult.rowCount > 0) {
+            if (insertResult.rows[0].was_inserted) {
+              croutonsStorageStatus.inserted++;
+            } else {
+              croutonsStorageStatus.updated++;
+            }
           }
           
-          croutonsStorageStatus.count++;
+          // Log first successful write
+          if ((croutonsStorageStatus.inserted + croutonsStorageStatus.updated) === 1) {
+            console.log('[ingest] First DB write confirmed:', {
+              id: insertResult.rows[0].id,
+              domain: insertResult.rows[0].domain,
+              crouton_id: insertResult.rows[0].crouton_id,
+              was_inserted: insertResult.rows[0].was_inserted
+            });
+          }
         }
         
+        // BLOCKER FIX #1: Add DB write receipt to verify persistence
+        const receiptResult = await pool.query(`
+          SELECT COUNT(*) as count FROM public.croutons WHERE domain = $1
+        `, [domain]);
+        const receiptSample = await pool.query(`
+          SELECT slot_id, fact_id, revision, updated_at 
+          FROM public.croutons 
+          WHERE domain = $1 
+          ORDER BY updated_at DESC 
+          LIMIT 3
+        `, [domain]);
+        
         croutonsStorageStatus.success = true;
-        console.log(`[ingest] ✅ Stored ${extractedContent.units.length} units to croutons table`);
+        croutonsStorageStatus.post_write_count = parseInt(receiptResult.rows[0].count);
+        croutonsStorageStatus.post_write_sample = receiptSample.rows;
+        
+        console.log(`[ingest] ✅ Croutons storage complete:`, {
+          attempted: croutonsStorageStatus.attempted,
+          inserted: croutonsStorageStatus.inserted,
+          updated: croutonsStorageStatus.updated,
+          skipped: croutonsStorageStatus.skipped,
+          invalid: croutonsStorageStatus.invalid,
+          total_in_db: croutonsStorageStatus.post_write_count
+        });
       } catch (croutonsError) {
         // Log but don't fail ingestion if croutons storage fails
         croutonsStorageStatus.error = croutonsError.message;
