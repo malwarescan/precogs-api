@@ -2750,41 +2750,83 @@ export async function ingestUrl(req, res) {
             });
           }
           
-          await pool.query(`
-            INSERT INTO croutons (
-              crouton_id, domain, source_url, text, triple,
-              slot_id, fact_id, previous_fact_id, revision,
-              supporting_text, evidence_anchor, extraction_text_hash,
-              confidence, verified_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
-            ON CONFLICT (crouton_id) DO UPDATE SET
-              text = EXCLUDED.text,
-              triple = EXCLUDED.triple,
-              slot_id = EXCLUDED.slot_id,
-              fact_id = EXCLUDED.fact_id,
-              previous_fact_id = EXCLUDED.previous_fact_id,
-              revision = EXCLUDED.revision,
-              supporting_text = EXCLUDED.supporting_text,
-              evidence_anchor = EXCLUDED.evidence_anchor,
-              extraction_text_hash = EXCLUDED.extraction_text_hash,
-              confidence = EXCLUDED.confidence,
-              verified_at = NOW(),
-              updated_at = NOW()
-          `, [
-            croutonId,
-            domain,
-            canonicalUrl,
-            unit.text,
-            JSON.stringify(unit.triple || null),
-            unit.slot_id || null,
-            unit.fact_id || null,
-            unit.previous_fact_id || null,
-            unit.revision || 1,
-            unit.supporting_text || null,
-            JSON.stringify(unit.evidence_anchor || null),
-            extractedContent.extraction_text_hash || null,
-            unit.confidence || 0.5
-          ]);
+          // Skip units with missing v1.1 identity (would cause unique constraint violations)
+          if (!unit.slot_id || !unit.fact_id) {
+            console.log(`[ingest] Skipping unit without v1.1 identity: ${croutonId}`);
+            continue;
+          }
+          
+          try {
+            await pool.query(`
+              INSERT INTO croutons (
+                crouton_id, domain, source_url, text, triple,
+                slot_id, fact_id, previous_fact_id, revision,
+                supporting_text, evidence_anchor, extraction_text_hash,
+                confidence, verified_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+              ON CONFLICT (crouton_id) DO UPDATE SET
+                text = EXCLUDED.text,
+                triple = EXCLUDED.triple,
+                slot_id = EXCLUDED.slot_id,
+                fact_id = EXCLUDED.fact_id,
+                previous_fact_id = EXCLUDED.previous_fact_id,
+                revision = EXCLUDED.revision,
+                supporting_text = EXCLUDED.supporting_text,
+                evidence_anchor = EXCLUDED.evidence_anchor,
+                extraction_text_hash = EXCLUDED.extraction_text_hash,
+                confidence = EXCLUDED.confidence,
+                verified_at = NOW(),
+                updated_at = NOW()
+            `, [
+              croutonId,
+              domain,
+              canonicalUrl,
+              unit.text,
+              JSON.stringify(unit.triple || null),
+              unit.slot_id,
+              unit.fact_id,
+              unit.previous_fact_id || null,
+              unit.revision || 1,
+              unit.supporting_text || null,
+              JSON.stringify(unit.evidence_anchor || null),
+              extractedContent.extraction_text_hash || null,
+              unit.confidence || 0.5
+            ]);
+          } catch (insertError) {
+            // Handle unique constraint violations for individual units
+            if (insertError.code === '23505') { // unique_violation
+              console.log(`[ingest] Unique constraint violation for unit, updating existing: ${croutonId}`);
+              // Try updating by slot_id instead
+              await pool.query(`
+                UPDATE croutons SET
+                  text = $1,
+                  triple = $2,
+                  fact_id = $3,
+                  revision = revision + 1,
+                  previous_fact_id = fact_id,
+                  supporting_text = $4,
+                  evidence_anchor = $5,
+                  extraction_text_hash = $6,
+                  confidence = $7,
+                  verified_at = NOW(),
+                  updated_at = NOW()
+                WHERE domain = $8 AND source_url = $9 AND slot_id = $10
+              `, [
+                unit.text,
+                JSON.stringify(unit.triple || null),
+                unit.fact_id,
+                unit.supporting_text || null,
+                JSON.stringify(unit.evidence_anchor || null),
+                extractedContent.extraction_text_hash || null,
+                unit.confidence || 0.5,
+                domain,
+                canonicalUrl,
+                unit.slot_id
+              ]);
+            } else {
+              throw insertError; // Re-throw if not a unique constraint error
+            }
+          }
           croutonsStorageStatus.count++;
         }
         
