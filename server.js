@@ -171,6 +171,40 @@ app.get("/debug/croutons-schema", async (_req, res) => {
   }
 });
 
+// Debug endpoint: test INSERT and verify it persists
+app.get("/debug/test-insert", async (_req, res) => {
+  try {
+    const testId = 'test-' + Date.now();
+    const testDomain = 'test-insert-debug.com';
+    
+    // INSERT
+    const insertResult = await pool.query(`
+      INSERT INTO croutons (
+        crouton_id, domain, source_url, text,
+        slot_id, fact_id, revision, confidence
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING id, domain, crouton_id
+    `, [testId, testDomain, 'https://test.com', 'Test fact', 'test-slot', 'test-fact', 1, 0.5]);
+    
+    // Query back immediately
+    const queryResult = await pool.query(`
+      SELECT * FROM croutons WHERE crouton_id = $1
+    `, [testId]);
+    
+    res.json({
+      ok: true,
+      insertedRow: insertResult.rows[0],
+      queriedRow: queryResult.rows[0] ? {
+        id: queryResult.rows[0].id,
+        domain: queryResult.rows[0].domain,
+        crouton_id: queryResult.rows[0].crouton_id
+      } : null
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message, stack: error.stack });
+  }
+});
+
 // Debug endpoint: check croutons table status
 app.get("/debug/croutons", async (_req, res) => {
   try {
