@@ -153,6 +153,24 @@ app.get("/debug/migrations", async (_req, res) => {
   }
 });
 
+// Debug endpoint: check croutons table schema
+app.get("/debug/croutons-schema", async (_req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT column_name, data_type, is_nullable
+      FROM information_schema.columns
+      WHERE table_name = 'croutons'
+      ORDER BY ordinal_position
+    `);
+    res.json({ 
+      ok: true,
+      columns: result.rows
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 // Debug endpoint: check croutons table status
 app.get("/debug/croutons", async (_req, res) => {
   try {
