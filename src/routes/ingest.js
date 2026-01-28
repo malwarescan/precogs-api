@@ -2738,6 +2738,18 @@ export async function ingestUrl(req, res) {
           const predicate = unit.triple?.predicate || 'states';
           const object = unit.triple?.object || unit.text;
           
+          // Debug: log first unit's v1.1 fields
+          if (croutonsStorageStatus.count === 0) {
+            console.log('[ingest] First unit v1.1 fields:', {
+              has_slot_id: !!unit.slot_id,
+              has_fact_id: !!unit.fact_id,
+              has_evidence_anchor: !!unit.evidence_anchor,
+              has_supporting_text: !!unit.supporting_text,
+              slot_id_sample: unit.slot_id ? unit.slot_id.substring(0, 16) : null,
+              extraction_text_hash_sample: extractedContent.extraction_text_hash ? extractedContent.extraction_text_hash.substring(0, 16) : null
+            });
+          }
+          
           await pool.query(`
             INSERT INTO croutons (
               crouton_id, domain, source_url, text, triple,
