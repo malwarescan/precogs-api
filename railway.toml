@@ -3,8 +3,3 @@ builder = "nixpacks"
 
 [deploy]
 startCommand = "npm run start"
-restartPolicyType = "on-failure"
-restartPolicyMaxRetries = 3
-
-[env]
-NODE_ENV = "production"
