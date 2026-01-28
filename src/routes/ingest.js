@@ -2652,23 +2652,28 @@ function buildTextExtractionFacts(domain, sourceUrl, canonicalExtractedText, ext
   console.log(`[buildTextExtractionFacts] Processing ${canonicalExtractedText.length} chars for ${domain}`);
   
   // Step 1: Split into sentences deterministically
-  // Use regex that looks for sentence boundaries
-  const sentenceRegex = /[^.!?]+[.!?]+/g;
+  // Use simple split and then find exact positions
+  const rawSentences = canonicalExtractedText.split(/[.!?]+/).filter(s => s.trim().length > 0);
   const sentences = [];
-  let match;
   
-  while ((match = sentenceRegex.exec(canonicalExtractedText)) !== null) {
-    const sentence = match[0].trim();
-    const charStart = match.index;
-    const charEnd = match.index + match[0].length;
+  let searchStart = 0;
+  for (const rawSentence of rawSentences) {
+    const trimmed = rawSentence.trim();
+    if (trimmed.length < 40 || trimmed.length > 240) continue;
     
-    if (sentence.length >= 40 && sentence.length <= 240) {
-      sentences.push({
-        text: sentence,
-        charStart,
-        charEnd
-      });
-    }
+    // Find the exact position of this sentence in the canonical text
+    const charStart = canonicalExtractedText.indexOf(trimmed, searchStart);
+    if (charStart === -1) continue; // Skip if not found
+    
+    const charEnd = charStart + trimmed.length;
+    sentences.push({
+      text: trimmed,
+      charStart,
+      charEnd
+    });
+    
+    // Next search starts after this sentence
+    searchStart = charEnd;
   }
   
   console.log(`[buildTextExtractionFacts] Found ${sentences.length} sentences in length range [40-240]`);
