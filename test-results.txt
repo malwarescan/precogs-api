@@ -1,0 +1,14 @@
+====== ACCEPTANCE TESTS FOR OPTION A ======
+
+1. Re-ingesting nrlc.ai...
+   Ingest OK: true
+   ✅ Ingestion succeeded
+
+   Waiting 5 seconds for processing...
+
+2. TEST 1: Both evidence types exist
+  19 text_extraction
+   structured_data: 
+   text_extraction: 19
+./test-acceptance.sh: line 42: [: : integer expression expected
+   ❌ TEST 1 FAILED: Missing evidence types

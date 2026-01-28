@@ -2982,26 +2982,47 @@ export async function ingestUrl(req, res) {
       );
       
       // PHASE B Step 2: Process schema facts as structured_data (NO ANCHORS)
-      const structuredDataFacts = (extractedContent.units || [])
-        .filter(unit => unit.triple && unit.triple.subject)
-        .map(unit => {
-          // Get schema source path if available
-          const sourcePath = unit.triple?.source_jsonld_ref || 
-                           `${unit.triple?.subject_type || 'Thing'}.${unit.triple?.predicate || 'property'}`;
+      const structuredDataFacts = [];
+      
+      // Process schema.org structured_data items
+      for (const schemaItem of (extractedContent.structured_data || [])) {
+        const itemType = Array.isArray(schemaItem['@type']) ? schemaItem['@type'][0] : schemaItem['@type'];
+        const itemId = schemaItem['@id'] || `https://${domain}/#${itemType?.toLowerCase() || 'thing'}`;
+        
+        // Extract key properties as facts
+        for (const [prop, value] of Object.entries(schemaItem)) {
+          // Skip JSON-LD keywords and complex nested objects
+          if (prop.startsWith('@') || typeof value === 'object' && !Array.isArray(value)) continue;
+          if (!value || value === '') continue;
           
-          return {
-            evidence_type: 'structured_data',
-            supporting_text: null,  // PHASE A: NO supporting_text for schema
-            evidence_anchor: null,  // PHASE A: NO evidence_anchor for schema
-            anchor_missing: true,   // PHASE A: Explicitly mark as non-anchorable
-            slot_id: null,         // No slot_id for schema facts
-            fact_id: generateId(domain, sourcePath, unit.triple?.object || ''),
-            revision: 1,
-            triple: unit.triple,
-            source_path: sourcePath,
-            confidence: unit.unit_confidence || 0.85
-          };
-        });
+          // Handle arrays (like sameAs)
+          const values = Array.isArray(value) ? value : [value];
+          
+          for (const val of values) {
+            if (!val || typeof val === 'object') continue;
+            
+            const sourcePath = `${itemType}.${prop}`;
+            const factId = generateId(domain, sourcePath, String(val));
+            
+            structuredDataFacts.push({
+              evidence_type: 'structured_data',
+              supporting_text: null,
+              evidence_anchor: null,
+              anchor_missing: true,
+              slot_id: null,
+              fact_id: factId,
+              revision: 1,
+              triple: {
+                subject: itemId,
+                predicate: prop,
+                object: String(val)
+              },
+              source_path: sourcePath,
+              confidence: 0.90
+            });
+          }
+        }
+      }
       
       console.log(`[ingest] Prepared ${textExtractionFacts.length} text_extraction + ${structuredDataFacts.length} structured_data facts`);
       
