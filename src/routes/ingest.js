@@ -2179,6 +2179,7 @@ function generateFactIdentity(unit, sourceUrl, extractionTextHash) {
 // Protocol v1.1: Add deterministic evidence anchors to all units
 // supporting_text MUST be exactly canonical_extracted_text[char_start:char_end]
 // fragment_hash MUST match sha256 of that exact substring
+// Protocol v1.1: Only anchor text_extraction units (not structured_data)
 function addEvidenceAnchors(units, canonicalExtractedText, extractionTextHash) {
   if (!canonicalExtractedText || !extractionTextHash) {
     console.warn('[addEvidenceAnchors] Missing canonical text or hash, skipping evidence anchors');
@@ -2186,7 +2187,22 @@ function addEvidenceAnchors(units, canonicalExtractedText, extractionTextHash) {
   }
   
   for (const unit of units) {
-    if (!unit.clean_text) continue;
+    // Protocol v1.1: Tag evidence type
+    // If unit is from triple (schema.org), it's structured_data
+    // If unit has clean_text that looks like a sentence from body, it's text_extraction
+    if (unit.triple && !unit.from_body_text) {
+      unit.evidence_type = 'structured_data';
+      unit.anchor_missing = true;  // By design - metadata not anchorable
+      unit.source_path = unit.triple.source_path || `${unit.triple.subject_type || 'Unknown'}.${unit.triple.predicate}`;
+      continue;  // Skip anchoring for metadata
+    }
+    
+    // Mark as text_extraction if it has clean_text from body
+    if (unit.clean_text && unit.clean_text.length > 10) {
+      unit.evidence_type = 'text_extraction';
+    } else {
+      continue;  // Skip if no text to anchor
+    }
     
     // Find unit text in canonical_extracted_text
     // Try exact match first
@@ -2302,9 +2318,11 @@ async function generateMarkdown(extractedContent, sourceUrl, contentHash, domain
   const mirrorPath = derivePath(sourceUrl);
   const mirrorUrl = `https://md.croutons.ai/${domain}/${mirrorPath}.md`;
   
+  // PHASE D: Update frontmatter markdown_version to 1.1
   const frontmatter = [
     '---',
     `protocol_version: "1.1"`,
+    `markdown_version: "1.1"`,
     `mirror_of: "${sourceUrl}"`,
     `canonical_mirror: "${mirrorUrl}"`,
     `source_url: "${sourceUrl}"`,
@@ -2436,53 +2454,73 @@ async function generateMarkdown(extractedContent, sourceUrl, contentHash, domain
     markdown += '\n';
   }
 
-  // === ATOMIC FACTS (Protocol v1.1) ===
-  // Query STORED units from croutons table (not extractedContent.units)
-  // This ensures mirror reflects actual stored facts, not ephemeral extraction output
-  let storedUnits = [];
+  // === PHASE D: SPLIT FACTS INTO 2 SECTIONS ===
+  // Query STORED facts from croutons table, separated by evidence_type
+  let textExtractionFacts = [];
+  let structuredDataFacts = [];
+  
   try {
-    const unitsResult = await pool.query(`
+    // Query text_extraction facts (citation-grade)
+    const textResult = await pool.query(`
       SELECT 
         triple,
         slot_id,
         fact_id,
         revision,
         supporting_text,
-        evidence_anchor
+        evidence_anchor,
+        evidence_type,
+        source_path
       FROM public.croutons
-      WHERE domain = $1 AND source_url = $2
+      WHERE domain = $1 AND source_url = $2 AND evidence_type = 'text_extraction'
       ORDER BY updated_at DESC
-      LIMIT 1000
+      LIMIT 500
     `, [domain, sourceUrl]);
-    storedUnits = unitsResult.rows;
+    textExtractionFacts = textResult.rows;
+    
+    // Query structured_data facts (metadata)
+    const structuredResult = await pool.query(`
+      SELECT 
+        triple,
+        fact_id,
+        evidence_type,
+        source_path
+      FROM public.croutons
+      WHERE domain = $1 AND source_url = $2 AND evidence_type = 'structured_data'
+      ORDER BY updated_at DESC
+      LIMIT 500
+    `, [domain, sourceUrl]);
+    structuredDataFacts = structuredResult.rows;
   } catch (err) {
-    console.error('[generateMarkdown] Failed to query stored units:', err.message);
+    console.error('[generateMarkdown] Failed to query stored facts:', err.message);
     // Fall back to empty if query fails
   }
   
-  if (storedUnits.length > 0) {
-    markdown += '## Facts (Protocol v1.1)\n\n';
-    markdown += '_Each fact includes deterministic evidence anchors for citation verification._\n\n';
+  // SECTION 1: Text Extraction Facts (Citation-Grade)
+  if (textExtractionFacts.length > 0) {
+    markdown += '## Facts (Text Extraction) — Citation-Grade\n\n';
+    markdown += '_Facts extracted from canonical page text with deterministic anchors for verification._\n\n';
     
-    for (const unit of storedUnits) {
+    for (const fact of textExtractionFacts) {
       // Parse triple from stored JSONB
-      const triple = typeof unit.triple === 'object' ? unit.triple : JSON.parse(unit.triple || '{}');
+      const triple = typeof fact.triple === 'object' ? fact.triple : JSON.parse(fact.triple || '{}');
       const subjectId = triple.subject || entityIds.page;
-      const predicate = triple.predicate || 'states';
+      const predicate = triple.predicate || 'mentions';
       const object = triple.object || '';
       
-      if (!object || !unit.slot_id || !unit.fact_id) continue;
+      if (!object || !fact.slot_id || !fact.fact_id) continue;
       
-      // Fact triple
+      // Fact triple (v1.1 format with triple line)
       markdown += `${subjectId} | ${predicate} | ${object}\n`;
       
       // Protocol v1.1 metadata
-      markdown += `meta | slot_id | ${unit.slot_id}\n`;
-      markdown += `meta | fact_id | ${unit.fact_id}\n`;
-      markdown += `meta | revision | ${unit.revision || 1}\n`;
+      markdown += `meta | slot_id | ${fact.slot_id}\n`;
+      markdown += `meta | fact_id | ${fact.fact_id}\n`;
+      markdown += `meta | revision | ${fact.revision || 1}\n`;
+      markdown += `meta | evidence_type | ${fact.evidence_type}\n`;
       
       // Evidence anchor (machine-readable)
-      const evidenceAnchor = typeof unit.evidence_anchor === 'object' ? unit.evidence_anchor : JSON.parse(unit.evidence_anchor || 'null');
+      const evidenceAnchor = typeof fact.evidence_anchor === 'object' ? fact.evidence_anchor : JSON.parse(fact.evidence_anchor || 'null');
       if (evidenceAnchor && evidenceAnchor.char_start != null) {
         const evidenceJson = JSON.stringify({
           char_start: evidenceAnchor.char_start,
@@ -2492,9 +2530,9 @@ async function generateMarkdown(extractedContent, sourceUrl, contentHash, domain
         });
         markdown += `evidence | anchor | ${evidenceJson}\n`;
         
-        // Supporting text (exact substring from canonical extraction)
-        if (unit.supporting_text) {
-          const escapedText = unit.supporting_text.replace(/\n/g, ' ').trim();
+        // Supporting text (exact substring from canonical extraction) - DO NOT TRUNCATE
+        if (fact.supporting_text) {
+          const escapedText = fact.supporting_text.replace(/\n/g, ' ').trim();
           markdown += `evidence | supporting_text | ${escapedText}\n`;
         }
       } else {
@@ -2502,6 +2540,36 @@ async function generateMarkdown(extractedContent, sourceUrl, contentHash, domain
         markdown += `meta | anchor_missing | true\n`;
       }
       
+      markdown += '\n';
+    }
+  }
+  
+  // SECTION 2: Structured Data Facts (Metadata, Not Anchorable)
+  if (structuredDataFacts.length > 0) {
+    markdown += '## Metadata (Structured Data) — Not Anchorable\n\n';
+    markdown += '_Facts extracted from schema.org markup. These are not anchored to page text._\n\n';
+    
+    for (const fact of structuredDataFacts) {
+      // Parse triple from stored JSONB
+      const triple = typeof fact.triple === 'object' ? fact.triple : JSON.parse(fact.triple || '{}');
+      const subjectId = triple.subject || entityIds.page;
+      const predicate = triple.predicate || 'property';
+      const object = triple.object || '';
+      
+      if (!object || !fact.fact_id) continue;
+      
+      // Fact triple
+      markdown += `${subjectId} | ${predicate} | ${object}\n`;
+      
+      // Metadata (no slot_id or anchors for structured_data)
+      markdown += `meta | fact_id | ${fact.fact_id}\n`;
+      markdown += `meta | evidence_type | ${fact.evidence_type}\n`;
+      
+      if (fact.source_path) {
+        markdown += `meta | source_path | ${fact.source_path}\n`;
+      }
+      
+      markdown += `meta | anchor_missing | true\n`;
       markdown += '\n';
     }
   }
@@ -2569,6 +2637,137 @@ async function generateMarkdown(extractedContent, sourceUrl, contentHash, domain
   }
 
   return frontmatter + markdown;
+}
+
+// PHASE B: Build text_extraction facts from canonical body text
+// Returns array of facts with deterministic anchors
+function buildTextExtractionFacts(domain, sourceUrl, canonicalExtractedText, extractionTextHash, orgName = null) {
+  const facts = [];
+  
+  if (!canonicalExtractedText || canonicalExtractedText.length < 50) {
+    console.log(`[buildTextExtractionFacts] Skipping - text too short (${canonicalExtractedText?.length || 0} chars)`);
+    return facts;
+  }
+  
+  console.log(`[buildTextExtractionFacts] Processing ${canonicalExtractedText.length} chars for ${domain}`);
+  
+  // Step 1: Split into sentences deterministically
+  // Use regex that looks for sentence boundaries
+  const sentenceRegex = /[^.!?]+[.!?]+/g;
+  const sentences = [];
+  let match;
+  
+  while ((match = sentenceRegex.exec(canonicalExtractedText)) !== null) {
+    const sentence = match[0].trim();
+    const charStart = match.index;
+    const charEnd = match.index + match[0].length;
+    
+    if (sentence.length >= 40 && sentence.length <= 240) {
+      sentences.push({
+        text: sentence,
+        charStart,
+        charEnd
+      });
+    }
+  }
+  
+  console.log(`[buildTextExtractionFacts] Found ${sentences.length} sentences in length range [40-240]`);
+  
+  // Step 2: Filter to high-signal sentences
+  const highSignalSentences = sentences.filter(s => {
+    const text = s.text.toLowerCase();
+    
+    // Check for org/brand name (if provided)
+    if (orgName && text.includes(orgName.toLowerCase())) {
+      return true;
+    }
+    
+    // Check for assertion patterns
+    if (/\b(is|are|means|provides|offers|has|have|includes|contains)\b/.test(text)) {
+      return true;
+    }
+    
+    // Check for structured data patterns (phone/email/url/number/%/date)
+    if (/\b\d{3}[-.)]\d{3}[-.)]\d{4}|\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b|https?:\/\/|www\.|:\s*\d+|\d+%|\d{4}-\d{2}-\d{2}/.test(text)) {
+      return true;
+    }
+    
+    return false;
+  });
+  
+  console.log(`[buildTextExtractionFacts] Filtered to ${highSignalSentences.length} high-signal sentences`);
+  
+  // Step 3: Cap to 30 sentences per page to avoid flooding
+  const selectedSentences = highSignalSentences.slice(0, 30);
+  
+  // Step 4: Create facts with validated anchors
+  const baseEntityId = `https://${domain}/#org`;
+  
+  for (const sentence of selectedSentences) {
+    // Validate anchor (non-negotiable)
+    const slice = canonicalExtractedText.substring(sentence.charStart, sentence.charEnd);
+    const fragmentHash = crypto.createHash('sha256').update(slice, 'utf8').digest('hex');
+    
+    // Hard validation
+    const sliceMatches = slice === sentence.text;
+    const hashMatches = crypto.createHash('sha256').update(sentence.text, 'utf8').digest('hex') === fragmentHash;
+    
+    if (!sliceMatches || !hashMatches) {
+      console.warn(`[buildTextExtractionFacts] Anchor validation FAILED for sentence at ${sentence.charStart}`);
+      console.warn(`  sliceMatches: ${sliceMatches}, hashMatches: ${hashMatches}`);
+      
+      // Set anchor_missing=true and DO NOT treat as citation-grade
+      facts.push({
+        evidence_type: 'text_extraction',
+        supporting_text: sentence.text,
+        evidence_anchor: null,
+        anchor_missing: true,
+        triple: {
+          subject: baseEntityId,
+          predicate: 'mentions',
+          object: sentence.text
+        },
+        source_path: null
+      });
+      continue;
+    }
+    
+    // Anchor is valid - create citation-grade fact
+    const evidenceAnchor = {
+      char_start: sentence.charStart,
+      char_end: sentence.charEnd,
+      fragment_hash: fragmentHash,
+      extraction_text_hash: extractionTextHash
+    };
+    
+    // Generate stable fact identity
+    const slotIdInput = `${baseEntityId}|mentions|${sourceUrl}|${sentence.charStart}|${sentence.charEnd}|${extractionTextHash}`;
+    const slotId = crypto.createHash('sha256').update(slotIdInput, 'utf8').digest('hex').substring(0, 16);
+    
+    const factIdInput = `${slotId}|${sentence.text}|${fragmentHash}`;
+    const factId = crypto.createHash('sha256').update(factIdInput, 'utf8').digest('hex').substring(0, 16);
+    
+    facts.push({
+      evidence_type: 'text_extraction',
+      supporting_text: sentence.text,
+      evidence_anchor: evidenceAnchor,
+      anchor_missing: false,
+      slot_id: slotId,
+      fact_id: factId,
+      revision: 1,
+      triple: {
+        subject: baseEntityId,
+        predicate: 'mentions',
+        object: sentence.text
+      },
+      source_path: null,
+      confidence: 0.90
+    });
+  }
+  
+  console.log(`[buildTextExtractionFacts] Created ${facts.length} text_extraction facts (${facts.filter(f => !f.anchor_missing).length} citation-grade)`);
+  
+  return facts;
 }
 
 // Generate and store markdown in markdown_versions table
@@ -2750,64 +2949,110 @@ export async function ingestUrl(req, res) {
       console.log(`[ingest] Skipping markdown generation - QA gate failed for ${domain}`);
     }
 
-    // Protocol v1.1: Store all units in croutons table for facts stream
-    // BLOCKER FIX: Track actual DB writes, not loop iterations
+    // Protocol v1.1: Store facts in croutons table
+    // PHASE B: Store BOTH evidence types (structured_data AND text_extraction)
     let croutonsStorageStatus = { 
       attempted: 0,
       inserted: 0,
       updated: 0,
       skipped: 0,
       invalid: 0,
+      text_extraction_facts: 0,
+      structured_data_facts: 0,
       success: false, 
       error: null
     };
-    if (extractedContent.units && extractedContent.units.length > 0) {
-      try {
-        console.log(`[ingest] Storing ${extractedContent.units.length} units to public.croutons table...`);
-        
-        // BLOCKER FIX #3: Proper for...of with await (not forEach)
-        for (const unit of extractedContent.units) {
+    
+    try {
+      console.log(`[ingest] PHASE B: Creating facts from both schema and text extraction...`);
+      
+      // PHASE B Step 1: Build text_extraction facts from canonical body text
+      const orgName = extractedContent.structured_data?.[0]?.name || null;
+      const textExtractionFacts = buildTextExtractionFacts(
+        domain,
+        canonicalUrl,
+        canonicalExtractedText,
+        extractionTextHash,
+        orgName
+      );
+      
+      // PHASE B Step 2: Process schema facts as structured_data (NO ANCHORS)
+      const structuredDataFacts = (extractedContent.units || [])
+        .filter(unit => unit.triple && unit.triple.subject)
+        .map(unit => {
+          // Get schema source path if available
+          const sourcePath = unit.triple?.source_jsonld_ref || 
+                           `${unit.triple?.subject_type || 'Thing'}.${unit.triple?.predicate || 'property'}`;
+          
+          return {
+            evidence_type: 'structured_data',
+            supporting_text: null,  // PHASE A: NO supporting_text for schema
+            evidence_anchor: null,  // PHASE A: NO evidence_anchor for schema
+            anchor_missing: true,   // PHASE A: Explicitly mark as non-anchorable
+            slot_id: null,         // No slot_id for schema facts
+            fact_id: generateId(domain, sourcePath, unit.triple?.object || ''),
+            revision: 1,
+            triple: unit.triple,
+            source_path: sourcePath,
+            confidence: unit.unit_confidence || 0.85
+          };
+        });
+      
+      console.log(`[ingest] Prepared ${textExtractionFacts.length} text_extraction + ${structuredDataFacts.length} structured_data facts`);
+      
+      // PHASE B Step 3: Insert both types
+      const allFacts = [...textExtractionFacts, ...structuredDataFacts];
+      
+      for (const fact of allFacts) {
           croutonsStorageStatus.attempted++;
-          // BLOCKER FIX #1: Skip units without v1.1 identity
-          if (!unit.slot_id || !unit.fact_id) {
+          
+          // Track evidence type
+          if (fact.evidence_type === 'text_extraction') {
+            croutonsStorageStatus.text_extraction_facts++;
+          } else if (fact.evidence_type === 'structured_data') {
+            croutonsStorageStatus.structured_data_facts++;
+          }
+          
+          // Skip if no fact_id (required for all facts)
+          if (!fact.fact_id) {
             croutonsStorageStatus.skipped++;
             continue;
           }
           
-          // BLOCKER FIX #5: Enforce object non-null
-          const object = unit.triple?.object || unit.text;
+          // Enforce object non-null
+          const object = fact.triple?.object;
           if (!object || object === '') {
-            console.log(`[ingest] Skipping unit with null/empty object: slot_id=${unit.slot_id}`);
+            console.log(`[ingest] Skipping fact with null/empty object: fact_id=${fact.fact_id}`);
             croutonsStorageStatus.invalid++;
             continue;
           }
           
           // Use fact_id as crouton_id (deterministic)
-          const croutonId = unit.fact_id.substring(0, 16);
+          const croutonId = fact.fact_id.substring(0, 16);
           
-          // Extract entity_id from triple or use default
-          const entityId = unit.triple?.subject || `https://${domain}/#org`;
-          const predicate = unit.triple?.predicate || 'states';
-          
-          // Build triple with non-null object
+          // Build triple
           const triple = {
-            subject: entityId,
-            predicate: predicate,
-            object: object
+            subject: fact.triple.subject,
+            predicate: fact.triple.predicate,
+            object: fact.triple.object
           };
           
-          // BLOCKER FIX #5: Ensure text is non-null (required by schema)
-          const text = unit.text || object;
+          // Text field (required by schema)
+          const text = object;
           
-          // BLOCKER FIX #2: Schema-qualify table name
-          // BLOCKER FIX #1: Use rowCount + xmax to track actual DB operations
+          // Evidence type and source_path
+          const evidenceType = fact.evidence_type;
+          const sourcePath = fact.source_path;
+          
+          // Protocol v1.1: Insert with evidence_type and proper anchor handling
           const insertResult = await pool.query(`
             INSERT INTO public.croutons (
               crouton_id, domain, source_url, text, triple,
               slot_id, fact_id, previous_fact_id, revision,
               supporting_text, evidence_anchor, extraction_text_hash,
+              evidence_type, source_path,
               confidence, verified_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
             ON CONFLICT (crouton_id) DO UPDATE SET
               domain = EXCLUDED.domain,
               source_url = EXCLUDED.source_url,
@@ -2819,6 +3064,8 @@ export async function ingestUrl(req, res) {
               supporting_text = EXCLUDED.supporting_text,
               evidence_anchor = EXCLUDED.evidence_anchor,
               extraction_text_hash = EXCLUDED.extraction_text_hash,
+              evidence_type = EXCLUDED.evidence_type,
+              source_path = EXCLUDED.source_path,
               confidence = EXCLUDED.confidence,
               verified_at = NOW(),
               updated_at = NOW()
@@ -2827,16 +3074,18 @@ export async function ingestUrl(req, res) {
             croutonId,
             domain,
             canonicalUrl,
-            text,  // BLOCKER FIX: Use non-null text (object fallback)
+            text,
             JSON.stringify(triple),
-            unit.slot_id,
-            unit.fact_id,
-            unit.previous_fact_id || null,
-            unit.revision || 1,
-            unit.supporting_text || null,
-            JSON.stringify(unit.evidence_anchor || null),
-            extractedContent.extraction_text_hash || null,
-            unit.confidence || 0.5
+            fact.slot_id,
+            fact.fact_id,
+            null, // previous_fact_id
+            fact.revision || 1,
+            fact.supporting_text || null,
+            fact.evidence_anchor ? JSON.stringify(fact.evidence_anchor) : null,
+            extractionTextHash,
+            evidenceType,
+            sourcePath,
+            fact.confidence || 0.5
           ]);
           
           // BLOCKER FIX #1: Count actual DB writes (not loop iterations)
@@ -2881,6 +3130,8 @@ export async function ingestUrl(req, res) {
           updated: croutonsStorageStatus.updated,
           skipped: croutonsStorageStatus.skipped,
           invalid: croutonsStorageStatus.invalid,
+          text_extraction_facts: croutonsStorageStatus.text_extraction_facts,
+          structured_data_facts: croutonsStorageStatus.structured_data_facts,
           total_in_db: croutonsStorageStatus.post_write_count
         });
       } catch (croutonsError) {
@@ -2889,6 +3140,11 @@ export async function ingestUrl(req, res) {
         console.error('[ingest] Croutons storage error (non-fatal):', croutonsError.message);
         console.error('[ingest] Croutons storage stack:', croutonsError.stack);
       }
+    } catch (topLevelError) {
+      // Handle top-level errors in PHASE B
+      croutonsStorageStatus.error = topLevelError.message;
+      console.error('[ingest] PHASE B error (non-fatal):', topLevelError.message);
+      console.error('[ingest] PHASE B stack:', topLevelError.stack);
     }
 
     res.json({

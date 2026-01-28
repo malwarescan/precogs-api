@@ -48,35 +48,54 @@ export async function getStatus(req, res) {
       });
     }
     
-    // 2. Check markdown versions (mirrors)
+    // 2. Check markdown versions (mirrors) - PHASE D: Detect markdown_version from content
     const markdownQuery = await pool.query(
       `SELECT 
         protocol_version,
         markdown_version,
+        content,
         COUNT(*) as count
       FROM public.markdown_versions 
       WHERE domain = $1 AND is_active = true
-      GROUP BY protocol_version, markdown_version`,
+      GROUP BY protocol_version, markdown_version, content`,
       [domain]
     );
     
-    const markdownVersion = markdownQuery.rows[0]?.protocol_version || markdownQuery.rows[0]?.markdown_version || '1.0';
+    // PHASE D: Detect markdown_version from frontmatter if present
+    let markdownVersion = '1.0';
+    if (markdownQuery.rows.length > 0 && markdownQuery.rows[0].content) {
+      const content = markdownQuery.rows[0].content;
+      // Check for markdown_version in frontmatter
+      const versionMatch = content.match(/markdown_version:\s*["']?([0-9.]+)["']?/);
+      if (versionMatch) {
+        markdownVersion = versionMatch[1];
+      } else {
+        // Fallback to protocol_version or default
+        markdownVersion = markdownQuery.rows[0]?.protocol_version || markdownQuery.rows[0]?.markdown_version || '1.0';
+      }
+    }
+    
     const mirrorsNonempty = markdownQuery.rows.length > 0 && markdownQuery.rows[0].count > 0;
     const pagesCount = markdownQuery.rows[0]?.count || 0;
     
-    // 3. Check facts (croutons table)
+    // 3. Check facts (croutons table) - PHASE C: Count by evidence_type
     const factsQuery = await pool.query(
-      `SELECT COUNT(*) as count,
-        COUNT(CASE WHEN slot_id IS NOT NULL AND fact_id IS NOT NULL THEN 1 END) as v11_count,
-        COUNT(CASE WHEN evidence_anchor IS NOT NULL THEN 1 END) as anchored_count
+      `SELECT 
+        COUNT(*) as count,
+        COUNT(CASE WHEN evidence_type = 'text_extraction' THEN 1 END) as text_extraction_count,
+        COUNT(CASE WHEN evidence_type = 'structured_data' THEN 1 END) as structured_data_count,
+        COUNT(CASE WHEN evidence_type = 'text_extraction' AND evidence_anchor IS NOT NULL AND anchor_missing = false THEN 1 END) as anchored_text_count,
+        COUNT(CASE WHEN slot_id IS NOT NULL AND fact_id IS NOT NULL THEN 1 END) as v11_count
       FROM public.croutons
       WHERE domain = $1`,
       [domain]
     );
     
     const factsCount = parseInt(factsQuery.rows[0]?.count || 0);
+    const textExtractionCount = parseInt(factsQuery.rows[0]?.text_extraction_count || 0);
+    const structuredDataCount = parseInt(factsQuery.rows[0]?.structured_data_count || 0);
+    const anchoredTextCount = parseInt(factsQuery.rows[0]?.anchored_text_count || 0);
     const v11FactsCount = parseInt(factsQuery.rows[0]?.v11_count || 0);
-    const anchoredCount = parseInt(factsQuery.rows[0]?.anchored_count || 0);
     const factsNonempty = factsCount > 0;
     const factsVersion = v11FactsCount > 0 ? '1.1' : '1.0';
     
@@ -121,22 +140,22 @@ export async function getStatus(req, res) {
     
     const extractionMethod = extractionQuery.rows[0]?.extraction_method || 'unknown';
     
-    // 7. Determine QA tier
+    // 7. Determine QA tier - PHASE C: Based on TEXT EXTRACTION ONLY
     const qaFailReasons = [];
     let qaTier = 'best_effort';
     let qaPass = false;
     
-    // Citation grade requires:
-    // - v1.1 facts with evidence anchors
-    // - High anchor coverage (>= 80% of facts have anchors)
-    const anchorRate = factsCount > 0 ? anchoredCount / factsCount : 0;
+    // Citation grade requires (TEXT EXTRACTION ONLY):
+    // - At least 10 text_extraction facts
+    // - High anchor coverage (>= 95% of text_extraction facts have valid anchors)
+    const anchorCoverageText = textExtractionCount > 0 ? anchoredTextCount / textExtractionCount : 0;
     
-    if (v11FactsCount > 0 && anchorRate >= 0.8) {
+    if (textExtractionCount >= 10 && anchorCoverageText >= 0.95) {
       qaTier = 'citation_grade';
       qaPass = true;
     } else {
-      if (v11FactsCount === 0) qaFailReasons.push('No v1.1 facts with slot_id/fact_id');
-      if (anchorRate < 0.8) qaFailReasons.push(`Low anchor coverage: ${(anchorRate * 100).toFixed(1)}% (need >= 80%)`);
+      if (textExtractionCount < 10) qaFailReasons.push(`Not enough text_extraction facts: ${textExtractionCount} (need >= 10)`);
+      if (anchorCoverageText < 0.95) qaFailReasons.push(`Low text anchor coverage: ${(anchorCoverageText * 100).toFixed(1)}% (need >= 95%)`);
     }
     
     // Full protocol requires:
@@ -176,7 +195,9 @@ export async function getStatus(req, res) {
       
       counts: {
         pages: pagesCount,
-        facts: factsCount,
+        facts_total: factsCount,
+        facts_text_extraction: textExtractionCount,
+        facts_structured_data: structuredDataCount,
         entities: entitiesCount
       },
       
@@ -190,7 +211,7 @@ export async function getStatus(req, res) {
         tier: qaTier,
         pass: qaPass,
         fail_reasons: qaFailReasons.length > 0 ? qaFailReasons : undefined,
-        anchor_coverage: anchorRate
+        anchor_coverage_text: anchorCoverageText
       },
       
       discovery: discoveryProof

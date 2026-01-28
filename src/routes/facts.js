@@ -26,10 +26,11 @@ export async function getFactsStream(req, res) {
       return res.status(400).json({ error: 'Domain required' });
     }
     
-    // Protocol v1.1: Query croutons with new fields
-    // BLOCKER FIX #2: Schema-qualify table name
-    const { rows } = await pool.query(
-      `SELECT 
+    // Protocol v1.1: Support filtering by evidence_type
+    const evidenceTypeFilter = req.query.evidence_type;
+    const validTypes = ['structured_data', 'text_extraction'];
+    
+    let query = `SELECT 
         crouton_id,
         source_url,
         text,
@@ -43,13 +44,23 @@ export async function getFactsStream(req, res) {
         revision,
         supporting_text,
         evidence_anchor,
-        extraction_text_hash
+        extraction_text_hash,
+        evidence_type,
+        source_path
       FROM public.croutons
-      WHERE domain = $1
-      ORDER BY created_at DESC
-      LIMIT 1000`,
-      [domain]
-    );
+      WHERE domain = $1`;
+    
+    const params = [domain];
+    
+    // Add evidence_type filter if provided
+    if (evidenceTypeFilter && validTypes.includes(evidenceTypeFilter)) {
+      query += ` AND evidence_type = $2`;
+      params.push(evidenceTypeFilter);
+    }
+    
+    query += ` ORDER BY created_at DESC LIMIT 1000`;
+    
+    const { rows } = await pool.query(query, params);
     
     // Protocol v1.1: Set proper NDJSON headers
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
@@ -71,6 +82,9 @@ export async function getFactsStream(req, res) {
       // Protocol v1.1: Use stored slot_id and fact_id if available
       const hasV1Fields = row.slot_id && row.fact_id;
       
+      // Protocol v1.1: Determine evidence type
+      const evidenceType = row.evidence_type || 'unknown';
+      
       // If we have a triple, use it
       if (row.triple && typeof row.triple === 'object') {
         const { subject, predicate, object } = row.triple;
@@ -82,15 +96,26 @@ export async function getFactsStream(req, res) {
           revision: row.revision || 1,
           previous_fact_id: row.previous_fact_id || null,
           
+          // Protocol v1.1: Evidence type (REQUIRED)
+          evidence_type: evidenceType,
+          
           // Core fact fields
           entity_id: subject || baseEntityId,
           predicate: predicate || 'states',
           object: object,
           source_url: row.source_url,
           
-          // Protocol v1.1: Evidence anchor
-          supporting_text: row.supporting_text || row.text || object,
-          evidence_anchor: row.evidence_anchor || null,
+          // Protocol v1.1: Evidence fields (conditional on type)
+          ...(evidenceType === 'text_extraction' ? {
+            supporting_text: row.supporting_text,
+            evidence_anchor: row.evidence_anchor,
+            anchor_missing: !row.evidence_anchor || !row.supporting_text
+          } : {
+            supporting_text: null,
+            evidence_anchor: null,
+            anchor_missing: true,
+            source_path: row.source_path || `${predicate}`
+          }),
           
           // Metadata
           updated_at: row.verified_at || row.created_at,
