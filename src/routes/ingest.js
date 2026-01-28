@@ -3134,17 +3134,11 @@ export async function ingestUrl(req, res) {
           structured_data_facts: croutonsStorageStatus.structured_data_facts,
           total_in_db: croutonsStorageStatus.post_write_count
         });
-      } catch (croutonsError) {
-        // Log but don't fail ingestion if croutons storage fails
-        croutonsStorageStatus.error = croutonsError.message;
-        console.error('[ingest] Croutons storage error (non-fatal):', croutonsError.message);
-        console.error('[ingest] Croutons storage stack:', croutonsError.stack);
-      }
-    } catch (topLevelError) {
-      // Handle top-level errors in PHASE B
-      croutonsStorageStatus.error = topLevelError.message;
-      console.error('[ingest] PHASE B error (non-fatal):', topLevelError.message);
-      console.error('[ingest] PHASE B stack:', topLevelError.stack);
+    } catch (phaseError) {
+      // Handle errors in PHASE B
+      croutonsStorageStatus.error = phaseError.message;
+      console.error('[ingest] PHASE B error (non-fatal):', phaseError.message);
+      console.error('[ingest] PHASE B stack:', phaseError.stack);
     }
 
     res.json({
