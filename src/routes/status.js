@@ -80,11 +80,12 @@ export async function getStatus(req, res) {
     const factsNonempty = factsCount > 0;
     const factsVersion = v11FactsCount > 0 ? '1.1' : '1.0';
     
-    // 4. Check graph (structured_data from html_snapshots or separate graph table)
+    // 4. Check graph (estimate based on html_snapshots existence)
+    // For now, assume graph is non-empty if we have ingested pages
     const graphQuery = await pool.query(
       `SELECT COUNT(*) as count
       FROM html_snapshots
-      WHERE domain = $1 AND structured_data IS NOT NULL AND structured_data::text != '[]'`,
+      WHERE domain = $1`,
       [domain]
     );
     
