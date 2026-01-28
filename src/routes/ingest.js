@@ -2786,7 +2786,7 @@ export async function ingestUrl(req, res) {
           
           // Simple INSERT with ON CONFLICT to handle re-ingests
           // crouton_id is derived from fact_id, so it's deterministic
-          await pool.query(`
+          const insertResult = await pool.query(`
             INSERT INTO croutons (
               crouton_id, domain, source_url, text, triple,
               slot_id, fact_id, previous_fact_id, revision,
@@ -2805,6 +2805,7 @@ export async function ingestUrl(req, res) {
               confidence = EXCLUDED.confidence,
               verified_at = NOW(),
               updated_at = NOW()
+            RETURNING id, domain, crouton_id
           `, [
             croutonId,
             domain,
@@ -2820,6 +2821,15 @@ export async function ingestUrl(req, res) {
             extractedContent.extraction_text_hash || null,
             unit.confidence || 0.5
           ]);
+          
+          // Log first successful INSERT
+          if (croutonsStorageStatus.count === 0 && insertResult.rows[0]) {
+            console.log('[ingest] First INSERT result:', {
+              id: insertResult.rows[0].id,
+              domain: insertResult.rows[0].domain,
+              crouton_id: insertResult.rows[0].crouton_id
+            });
+          }
           
           croutonsStorageStatus.count++;
         }
