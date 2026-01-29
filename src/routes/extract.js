@@ -195,6 +195,19 @@ export async function getExtract(req, res) {
       factsPassed++;
     }
     
+    // Build failure summary for dashboard (schema-stable, always returns array)
+    const failedResults = validationResults.filter(r => !r.passed);
+    const firstFailedFact = failedResults[0] || null;
+    const failureExamples = failedResults.slice(0, 3).map(f => ({
+      slot_id: f.slot_id ?? null,
+      fact_id: f.fact_id ?? null,
+      reason: f.error ?? f.reason ?? 'validation_failed',
+      char_start: f.char_start ?? null,
+      char_end: f.char_end ?? null,
+      expected_fragment_hash: f.expected_hash ?? f.fragment_hash ?? null,
+      actual_fragment_hash: f.computed_hash ?? f.computed_fragment_hash ?? null
+    }));
+    
     // 5. Build response
     const passRate = factsValidated > 0 ? factsPassed / factsValidated : 0;
     
@@ -210,7 +223,9 @@ export async function getExtract(req, res) {
         facts_passed: factsPassed,
         facts_failed: factsFailed,
         pass_rate: passRate,
-        citation_grade: passRate >= 0.95 && factsPassed >= 10
+        citation_grade: passRate >= 0.95 && factsPassed >= 10,
+        first_failed_fact: firstFailedFact,
+        failed_examples: failureExamples
       },
       // Only include validation results if there are failures (for debugging)
       validation_results: factsFailed > 0 ? validationResults.filter(r => !r.passed) : undefined,

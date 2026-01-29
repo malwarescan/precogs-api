@@ -58,6 +58,18 @@ export async function getFactsStream(req, res) {
       params.push(evidenceTypeFilter);
     }
     
+    // PHASE F: Add source_url filter for per-URL verification
+    const sourceUrlFilter = (req.query.source_url || '').trim();
+    if (sourceUrlFilter) {
+      // Normalize: strip all trailing slashes, then match both variants
+      const base = sourceUrlFilter.replace(/\/+$/, '');
+      const urlA = base;
+      const urlB = base + '/';
+      
+      query += ` AND (source_url = $${params.length + 1} OR source_url = $${params.length + 2})`;
+      params.push(urlA, urlB);
+    }
+    
     query += ` ORDER BY created_at DESC LIMIT 1000`;
     
     const { rows } = await pool.query(query, params);
