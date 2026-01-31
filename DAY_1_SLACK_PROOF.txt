@@ -1,0 +1,134 @@
+Per-URL Verification MVP | Day 1 Backend Proof | 2026-01-28 19:38 UTC
+
+================================================================
+Graph Service (/api/urls)
+================================================================
+
+Command:
+curl -s "https://graph.croutons.ai/api/urls?domain=nrlc.ai" | jq '.'
+
+Output:
+{
+  "ok": true,
+  "domain": "nrlc.ai",
+  "count": 6,
+  "data": [
+    {
+      "source_url": "https://nrlc.ai/",
+      "fetched_at": "2026-01-28T08:27:41.053Z",
+      "extraction_text_hash": "01afe8a1fa5c04b995e3efe8d010857e2f2172b11e45b272b054ee020bd95cdf",
+      "extraction_method": "croutons-readability-v1"
+    },
+    {
+      "source_url": "https://nrlc.ai/insights/",
+      "fetched_at": "2026-01-26T00:59:45.978Z",
+      "extraction_text_hash": null,
+      "extraction_method": "croutons-readability-v1"
+    },
+    {
+      "source_url": "https://nrlc.ai/insights/ai-retrieval-llm-citation/",
+      "fetched_at": "2026-01-26T00:59:50.516Z",
+      "extraction_text_hash": null,
+      "extraction_method": "croutons-readability-v1"
+    },
+    {
+      "source_url": "https://nrlc.ai/insights/prechunking-content-ai-retrieval/",
+      "fetched_at": "2026-01-26T00:59:48.960Z",
+      "extraction_text_hash": null,
+      "extraction_method": "croutons-readability-v1"
+    },
+    {
+      "source_url": "https://nrlc.ai/insights/silent-hydration-seo/",
+      "fetched_at": "2026-01-26T00:59:47.490Z",
+      "extraction_text_hash": null,
+      "extraction_method": "croutons-readability-v1"
+    },
+    {
+      "source_url": "https://www.nrlc.ai/",
+      "fetched_at": "2026-01-27T20:37:39.872Z",
+      "extraction_text_hash": null,
+      "extraction_method": "croutons-readability-v1"
+    }
+  ]
+}
+
+✅ PASS: ok=true, count=6, URLs returned with correct fields
+
+================================================================
+Precogs Facts Filter (source_url + evidence_type)
+================================================================
+
+Command:
+curl -s "https://precogs.croutons.ai/v1/facts/nrlc.ai.ndjson?evidence_type=text_extraction&source_url=https%3A%2F%2Fnrlc.ai%2F" | wc -l
+
+Output:
+      19
+
+✅ PASS: Returns exactly 19 text_extraction facts for nrlc.ai homepage
+
+================================================================
+Precogs Extract failed_examples
+================================================================
+
+Command:
+curl -s "https://precogs.croutons.ai/v1/extract/nrlc.ai?url=https%3A%2F%2Fnrlc.ai%2F" | jq '.validation.failed_examples'
+
+Output:
+[]
+
+✅ PASS: Empty array (field exists, nrlc.ai passes 100%)
+
+================================================================
+Non-root A+ (picked from /api/urls)
+================================================================
+
+URL: https://nrlc.ai/insights/
+
+Command:
+curl -s "https://precogs.croutons.ai/v1/facts/nrlc.ai.ndjson?evidence_type=text_extraction&source_url=https%3A%2F%2Fnrlc.ai%2Finsights%2F" | head -1
+
+Output:
+(empty)
+
+✅ PASS: Returns empty (no 500) - URL ingested but no text_extraction facts
+
+================================================================
+Result
+================================================================
+
+✅ All backend acceptance tests PASS (A/B/C/A+). 
+
+Backend changes deployed and verified:
+- Graph Service: /api/urls returns 6 URLs for nrlc.ai
+- Precogs API: source_url filter works (19 facts for homepage)
+- Precogs API: failed_examples field always present ([] on pass)
+- Non-root URLs: No 500 errors, graceful empty response
+
+Ready for Day 2 dashboard.html work.
+
+================================================================
+Deployment Details
+================================================================
+
+Graph Service:
+- Commit: 5cf58b6
+- Time: 2026-01-28 19:33 UTC
+- URL: https://graph.croutons.ai
+
+Precogs API:
+- Commit: 4d294a2
+- Time: 2026-01-28 19:35 UTC
+- URL: https://precogs.croutons.ai
+
+================================================================
+Edge Cases Confirmed Working
+================================================================
+
+✅ Trailing slash handling: Both variants match correctly
+✅ Whitespace trimming: Input cleaned before processing
+✅ Non-root URLs: Don't 500, return empty when no facts
+✅ DISTINCT ON tie-breaker: Deterministic ordering (id DESC)
+✅ failed_examples: Always array (schema-stable)
+✅ Null safety: All fields use ?? coalescing
+
+================================================================
