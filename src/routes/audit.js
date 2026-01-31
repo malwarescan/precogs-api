@@ -33,6 +33,7 @@ export async function auditPage(req, res) {
     const checkWeight = maxScore / 6; // 6 checks total
 
     // Check 1: Discovery (alternate link tags)
+    let html = null;
     try {
       const htmlResponse = await fetch(url, {
         headers: { 'User-Agent': 'Croutons-Audit/1.0' },
@@ -45,7 +46,7 @@ export async function auditPage(req, res) {
           message: `Failed to fetch HTML (${htmlResponse.status})`
         };
       } else {
-        const html = await htmlResponse.text();
+        html = await htmlResponse.text();
         
         // Look for markdown alternate link
         const hasMarkdownLink = html.includes('rel="alternate"') && 
@@ -273,12 +274,111 @@ export async function auditPage(req, res) {
       };
     }
 
+    // CONTENT QUALITY CHECKS (AEO/GEO citeability)
+    if (html) {
+      // Check 7: Answer Box (40-60 word quotable snippet)
+      const answerBoxMatch = html.match(/<meta\s+name="description"\s+content="([^"]+)"/i);
+      if (answerBoxMatch) {
+        const desc = answerBoxMatch[1];
+        const wordCount = desc.split(/\s+/).length;
+        const pass = wordCount >= 40 && wordCount <= 60;
+        
+        contentQuality.answer_box = {
+          pass,
+          message: pass 
+            ? `Description meta tag is ${wordCount} words (optimal for AI)`
+            : `Description is ${wordCount} words (optimal: 40-60 for AI citeability)`,
+          score: pass ? 100 : Math.min(100, (wordCount / 50) * 100)
+        };
+        
+        if (pass) contentScore += contentWeight;
+      } else {
+        contentQuality.answer_box = {
+          pass: false,
+          message: 'Missing meta description (Answer Box)',
+          score: 0
+        };
+      }
+      
+      // Check 8: Structured Headings (H2s with specific queries)
+      const h2Count = (html.match(/<h2[^>]*>/gi) || []).length;
+      const pass_h2 = h2Count >= 3 && h2Count <= 8;
+      
+      contentQuality.structured_headings = {
+        pass: pass_h2,
+        message: pass_h2 
+          ? `Found ${h2Count} H2 sections (good structure)`
+          : h2Count === 0 
+            ? 'No H2 headings found (add query-ready section headings)'
+            : `${h2Count} H2 headings (optimal: 3-8 for scannability)`,
+        score: pass_h2 ? 100 : Math.min(100, (h2Count / 5) * 100)
+      };
+      
+      if (pass_h2) contentScore += contentWeight;
+      
+      // Check 9: Structured Data (tables, lists, decision rubrics)
+      const hasTable = html.includes('<table');
+      const hasLists = (html.match(/<ul|<ol/gi) || []).length >= 2;
+      const pass_structured = hasTable || hasLists;
+      
+      contentQuality.structured_assets = {
+        pass: pass_structured,
+        message: pass_structured 
+          ? `Found structured content (${hasTable ? 'tables' : 'lists'})`
+          : 'No structured assets (add tables, lists, or decision rubrics)',
+        score: pass_structured ? 100 : 0
+      };
+      
+      if (pass_structured) contentScore += contentWeight;
+      
+      // Check 10: Word Count (optimal range for AI processing)
+      const textContent = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+      const totalWords = textContent.split(/\s+/).length;
+      const pass_length = totalWords >= 800 && totalWords <= 3000;
+      
+      contentQuality.content_length = {
+        pass: pass_length,
+        message: pass_length 
+          ? `Content length ${totalWords} words (optimal for AI)`
+          : totalWords < 800 
+            ? `Only ${totalWords} words (too thin for AI citations)`
+            : `${totalWords} words (may be too long, consider breaking into multiple pages)`,
+        score: pass_length ? 100 : totalWords >= 500 ? 70 : 30
+      };
+      
+      if (pass_length) contentScore += contentWeight;
+      
+      // Check 11: Link Density (proper internal linking)
+      const linkCount = (html.match(/<a\s+href/gi) || []).length;
+      const linkDensity = linkCount / (totalWords / 100);
+      const pass_links = linkDensity >= 1 && linkDensity <= 5;
+      
+      contentQuality.link_density = {
+        pass: pass_links,
+        message: pass_links 
+          ? `Link density ${linkDensity.toFixed(1)} per 100 words (good for context)`
+          : linkDensity < 1 
+            ? `Low link density (${linkDensity.toFixed(1)} per 100 words) - add internal links`
+            : `High link density (${linkDensity.toFixed(1)} per 100 words) - may dilute focus`,
+        score: pass_links ? 100 : 50
+      };
+      
+      if (pass_links) contentScore += contentWeight;
+    }
+
     // Determine tier based on score
     let tier = 'Not Connected';
     if (score >= 90) tier = 'Tier 1: Full Protocol';
     else if (score >= 70) tier = 'Tier 2: Core Features';
     else if (score >= 50) tier = 'Tier 3: Basic Integration';
     else if (score >= 30) tier = 'Tier 4: Partial Support';
+    
+    // Determine citeability grade
+    let citeabilityGrade = 'F';
+    if (contentScore >= 90) citeabilityGrade = 'A';
+    else if (contentScore >= 80) citeabilityGrade = 'B';
+    else if (contentScore >= 70) citeabilityGrade = 'C';
+    else if (contentScore >= 60) citeabilityGrade = 'D';
 
     // Generate fix pack (basic recommendations)
     const fix_pack = {
@@ -332,6 +432,41 @@ export async function auditPage(req, res) {
         priority: 'low'
       });
     }
+    
+    // Add content quality recommendations
+    if (contentQuality.answer_box && !contentQuality.answer_box.pass) {
+      fix_pack.recommendations.push({
+        check: 'answer_box',
+        action: 'Add a 40-60 word meta description that acts as an AI-quotable snippet',
+        priority: 'high'
+      });
+    }
+    
+    if (contentQuality.structured_headings && !contentQuality.structured_headings.pass) {
+      fix_pack.recommendations.push({
+        check: 'structured_headings',
+        action: 'Add 3-8 H2 section headings with query-ready titles',
+        priority: 'high'
+      });
+    }
+    
+    if (contentQuality.structured_assets && !contentQuality.structured_assets.pass) {
+      fix_pack.recommendations.push({
+        check: 'structured_assets',
+        action: 'Add tables, comparison charts, or structured lists for AI parsing',
+        priority: 'medium'
+      });
+    }
+    
+    if (contentQuality.content_length && !contentQuality.content_length.pass) {
+      fix_pack.recommendations.push({
+        check: 'content_length',
+        action: contentQuality.content_length.message.includes('thin') 
+          ? 'Expand content to 800-3000 words for comprehensive coverage'
+          : 'Consider breaking long content into multiple focused pages',
+        priority: 'medium'
+      });
+    }
 
     res.json({
       ok: true,
@@ -339,7 +474,10 @@ export async function auditPage(req, res) {
       domain,
       tier,
       score: Math.round(score),
+      citeability_grade: citeabilityGrade,
+      citeability_score: Math.round(contentScore),
       checks,
+      content_quality: Object.keys(contentQuality).length > 0 ? contentQuality : null,
       fix_pack: fix_pack.recommendations.length > 0 ? fix_pack : null,
       audited_at: new Date().toISOString()
     });
